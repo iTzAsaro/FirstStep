@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "@app": ["src/app/index.ts"],
+      "@app/*": ["src/app/*"],
+      "@pages": ["src/pages/index.ts"],
+      "@pages/*": ["src/pages/*"],
+      "@widgets": ["src/widgets/index.ts"],
+      "@widgets/*": ["src/widgets/*"],
+      "@features": ["src/features/index.ts"],
+      "@features/*": ["src/features/*"],
+      "@processes": ["src/processes/index.ts"],
+      "@processes/auth": ["src/processes/auth/index.ts"],
+      "@processes/*": ["src/processes/*"],
+      "@entities": ["src/entities/index.ts"],
+      "@entities/*": ["src/entities/*"],
+      "@shared": ["src/shared/index.ts"],
+      "@shared/*": ["src/shared/*"]
+    },
+    "types": ["vite/client"]
+  },
+  "include": ["src"]
+}
