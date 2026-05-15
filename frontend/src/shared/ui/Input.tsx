@@ -1,0 +1,32 @@
+import type { InputHTMLAttributes, ReactNode } from "react";
+
+import { cn } from "@/shared/lib/cn";
+
+type Props = InputHTMLAttributes<HTMLInputElement> & {
+  leftSlot?: ReactNode;
+  rightSlot?: ReactNode;
+};
+
+export function Input({ className, leftSlot, rightSlot, ...props }: Props) {
+  return (
+    <div className="relative">
+      {leftSlot ? (
+        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+          {leftSlot}
+        </div>
+      ) : null}
+      <input
+        className={cn(
+          "w-full bg-[#f3f6fc] text-slate-800 rounded-xl px-4 py-3.5 outline-none focus:ring-2 focus:ring-[#294266]/30 transition-all text-sm",
+          leftSlot ? "pl-11" : null,
+          rightSlot ? "pr-12" : null,
+          className,
+        )}
+        {...props}
+      />
+      {rightSlot ? (
+        <div className="absolute inset-y-0 right-0 pr-4 flex items-center">{rightSlot}</div>
+      ) : null}
+    </div>
+  );
+}
