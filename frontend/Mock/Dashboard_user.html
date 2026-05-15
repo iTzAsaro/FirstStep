@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - FirsTep</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* Fondo gris/azulado muy claro */
+        }
+        /* Custom scrollbar para las listas si es necesario */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+    <!-- ========================================== -->
+    <!-- TOP NAVIGATION BAR                         -->
+    <!-- ========================================== -->
+    <nav class="bg-white border-b border-slate-200 sticky top-0 z-50">
+        <div class="max-w-[1400px] mx-auto px-6 h-16 flex items-center justify-between">
+            
+            <!-- Logo & Main Links -->
+            <div class="flex items-center gap-10">
+                <a href="#" class="font-bold text-[#1e3456] text-xl tracking-tight">FirsTep</a>
+                
+                <div class="hidden md:flex items-center h-16 gap-8 text-sm font-medium">
+                    <a href="#" class="h-full flex items-center text-[#294266] border-b-2 border-[#294266]">Panel</a>
+                    <a href="#" class="h-full flex items-center text-slate-500 hover:text-slate-800 transition-colors border-b-2 border-transparent">Fondo de Talento</a>
+                    <a href="#" class="h-full flex items-center text-slate-500 hover:text-slate-800 transition-colors border-b-2 border-transparent">Ofertas de Trabajo</a>
+                    <a href="#" class="h-full flex items-center text-slate-500 hover:text-slate-800 transition-colors border-b-2 border-transparent">Análisis</a>
+                </div>
+            </div>
+
+            <!-- Search & Actions -->
+            <div class="flex items-center gap-6">
+                <!-- Search -->
+                <div class="hidden lg:block relative w-64">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-400"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                    </div>
+                    <input type="text" placeholder="Buscar talento..." class="w-full bg-[#f1f5f9] text-slate-700 rounded-full pl-10 pr-4 py-2 outline-none focus:ring-2 focus:ring-[#294266]/20 transition-all text-sm border border-transparent">
+                </div>
+
+                <!-- Icons -->
+                <div class="flex items-center gap-4 text-slate-400">
+                    <button class="hover:text-slate-600 transition-colors relative">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+                        <span class="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+                    </button>
+                    <button class="hover:text-slate-600 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
+                    <!-- Avatar -->
+                    <button class="w-8 h-8 rounded-full border border-slate-200 overflow-hidden ml-2">
+                        <img src="https://i.pravatar.cc/150?img=32" alt="" class="w-full h-full object-cover">
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ========================================== -->
+    <!-- MAIN DASHBOARD CONTENT                     -->
+    <!-- ========================================== -->
+    <main class="max-w-[1400px] mx-auto px-6 py-8 w-full flex-1">
+        
+        <!-- Header Section -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-end mb-10 gap-4">
+            <div>
+                <h1 class="text-3xl md:text-4xl font-bold text-[#1e3456] mb-2 tracking-tight">Bienvenido de nuevo, Alex.</h1>
+                <p class="text-slate-500 text-sm md:text-base">Tienes 12 nuevas aplicaciones para tus roles activos hoy.</p>
+            </div>
+            <button class="bg-[#294266] text-white px-5 py-2.5 rounded-lg font-medium hover:bg-[#1a2b44] transition-colors shadow-md shadow-[#294266]/20 flex items-center gap-2 text-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                Publicar Nuevo Trabajo
+            </button>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- STATS CARDS GRID                           -->
+        <!-- ========================================== -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+            
+            <!-- Card 1 -->
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 flex flex-col justify-between">
+                <h3 class="text-[10px] font-bold text-slate-400 tracking-widest uppercase mb-4">Trabajos Activos</h3>
+                <div class="flex items-end justify-between">
+                    <span class="text-4xl font-bold text-[#1e3456]">08</span>
+                    <span class="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">+2 este mes</span>
+                </div>
+            </div>
+
+            <!-- Card 2 -->
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 flex flex-col justify-between">
+                <h3 class="text-[10px] font-bold text-slate-400 tracking-widest uppercase mb-4">Aplicaciones Totales</h3>
+                <div class="flex items-end justify-between">
+                    <span class="text-4xl font-bold text-[#1e3456]">342</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-300"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                </div>
+            </div>
+
+            <!-- Card 3 -->
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 flex flex-col justify-between">
+                <h3 class="text-[10px] font-bold text-slate-400 tracking-widest uppercase mb-4">Entrevistas Pendientes</h3>
+                <div class="flex items-end justify-between">
+                    <span class="text-4xl font-bold text-[#1e3456]">14</span>
+                    <!-- Simple overlap circles to represent people/avatars -->
+                    <div class="flex -space-x-2">
+                        <div class="w-6 h-6 rounded-full bg-slate-200 border-2 border-white"></div>
+                        <div class="w-6 h-6 rounded-full bg-[#5d85c4] border-2 border-white"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 4 (Highlighted) -->
+            <div class="bg-[#294266] rounded-2xl p-6 shadow-md shadow-[#294266]/20 flex flex-col justify-between relative overflow-hidden">
+                <!-- Decorative background elements -->
+                <div class="absolute -right-4 -top-4 w-24 h-24 bg-white/5 rounded-full blur-xl"></div>
+                <h3 class="text-[10px] font-bold text-blue-200/80 tracking-widest uppercase mb-4 relative z-10">Prom. Match con IA</h3>
+                <div class="flex items-end justify-between relative z-10">
+                    <span class="text-4xl font-bold text-white">92%</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-blue-200/80"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ========================================== -->
+        <!-- MAIN COLUMNS LAYOUT                        -->
+        <!-- ========================================== -->
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-8">
+            
+            <!-- LEFT COLUMN (Spans 2/3 on XL) -->
+            <div class="xl:col-span-2 space-y-10">
+                
+                <!-- TOP TALENT SECTION -->
+                <section>
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-[#1e3456] tracking-tight">Mejores Recomendaciones de Talento</h2>
+                        <a href="#" class="text-xs font-semibold text-[#294266] hover:underline">Ver Todos los Matches</a>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Talent Card 1 -->
+                        <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 flex flex-col">
+                            <div class="flex items-start gap-4 mb-4">
+                                <img src="https://i.pravatar.cc/150?img=44" alt="" class="w-14 h-14 rounded-xl object-cover border border-slate-100">
+                                <div>
+                                    <h3 class="font-bold text-[#1e3456] text-lg">Sarah Jenkins</h3>
+                                    <p class="text-xs text-slate-500 mb-2">Diseñadora de Producto Senior</p>
+                                    <div class="flex flex-wrap gap-2">
+                                        <span class="bg-blue-50 text-[#294266] text-[9px] font-bold tracking-wider px-2 py-1 rounded-md">98% MATCH</span>
+                                        <span class="bg-slate-100 text-slate-600 text-[9px] font-bold tracking-wider px-2 py-1 rounded-md uppercase">Experta en Figma</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <p class="text-xs text-slate-500 leading-relaxed mb-6 flex-1">
+                                8+ años de experiencia en empresas SaaS de primer nivel. Experta en sistemas de diseño y flujos centrados en el usuario...
+                            </p>
+                            <div class="flex gap-3">
+                                <button class="flex-1 bg-[#294266] text-white py-2.5 rounded-lg text-xs font-semibold hover:bg-[#1a2b44] transition-colors">
+                                    Invitar a Aplicar
+                                </button>
+                                <button class="p-2.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#294266] hover:border-[#294266] transition-colors">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Talent Card 2 -->
+                        <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 flex flex-col">
+                            <div class="flex items-start gap-4 mb-4">
+                                <img src="https://i.pravatar.cc/150?img=12" alt="" class="w-14 h-14 rounded-xl object-cover border border-slate-100">
+                                <div>
+                                    <h3 class="font-bold text-[#1e3456] text-lg">Marcus Thorne</h3>
+                                    <p class="text-xs text-slate-500 mb-2">Ingeniero Backend Lead</p>
+                                    <div class="flex flex-wrap gap-2">
+                                        <span class="bg-blue-50 text-[#294266] text-[9px] font-bold tracking-wider px-2 py-1 rounded-md">95% MATCH</span>
+                                        <span class="bg-slate-100 text-slate-600 text-[9px] font-bold tracking-wider px-2 py-1 rounded-md uppercase">Node.js</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <p class="text-xs text-slate-500 leading-relaxed mb-6 flex-1">
+                                Especializado en infraestructura de alta escala y microservicios. Previamente lideró el departamento de ingeniería en...
+                            </p>
+                            <div class="flex gap-3">
+                                <button class="flex-1 bg-[#294266] text-white py-2.5 rounded-lg text-xs font-semibold hover:bg-[#1a2b44] transition-colors">
+                                    Invitar a Aplicar
+                                </button>
+                                <button class="p-2.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#294266] hover:border-[#294266] transition-colors">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ACTIVE JOBS SECTION -->
+                <section>
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-[#1e3456] tracking-tight">Ofertas de Trabajo Activas</h2>
+                        <button class="text-slate-400 hover:text-[#294266] transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+                        </button>
+                    </div>
+
+                    <!-- Table Container -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-[#f8fafc] border-b border-slate-100 text-[10px] uppercase tracking-widest text-slate-400">
+                                        <th class="py-4 px-6 font-bold">Nombre del Rol</th>
+                                        <th class="py-4 px-6 font-bold">Estado</th>
+                                        <th class="py-4 px-6 font-bold">Aplicantes</th>
+                                        <th class="py-4 px-6 font-bold text-right">Acción</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Row 1 -->
+                                    <tr class="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                                        <td class="py-4 px-6">
+                                            <p class="text-sm font-semibold text-[#1e3456]">Diseñador UX Senior</p>
+                                            <p class="text-[11px] text-slate-400 mt-1">Publicado hace 3 días</p>
+                                        </td>
+                                        <td class="py-4 px-6">
+                                            <span class="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600">
+                                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Activo
+                                            </span>
+                                        </td>
+                                        <td class="py-4 px-6 text-sm text-slate-600">
+                                            <span class="font-bold text-[#1e3456]">48</span> aplicantes
+                                        </td>
+                                        <td class="py-4 px-6 text-right">
+                                            <button class="text-xs font-bold text-[#294266] hover:text-blue-800 transition-colors">Gestionar</button>
+                                        </td>
+                                    </tr>
+                                    <!-- Row 2 -->
+                                    <tr class="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                                        <td class="py-4 px-6">
+                                            <p class="text-sm font-semibold text-[#1e3456]">Director de Marketing</p>
+                                            <p class="text-[11px] text-slate-400 mt-1">Publicado hace 1 semana</p>
+                                        </td>
+                                        <td class="py-4 px-6">
+                                            <span class="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600">
+                                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Activo
+                                            </span>
+                                        </td>
+                                        <td class="py-4 px-6 text-sm text-slate-600">
+                                            <span class="font-bold text-[#1e3456]">112</span> aplicantes
+                                        </td>
+                                        <td class="py-4 px-6 text-right">
+                                            <button class="text-xs font-bold text-[#294266] hover:text-blue-800 transition-colors">Gestionar</button>
+                                        </td>
+                                    </tr>
+                                    <!-- Row 3 -->
+                                    <tr class="hover:bg-slate-50/50 transition-colors">
+                                        <td class="py-4 px-6">
+                                            <p class="text-sm font-semibold text-[#1e3456]">Ingeniero DevOps Lead</p>
+                                            <p class="text-[11px] text-slate-400 mt-1">Borrador</p>
+                                        </td>
+                                        <td class="py-4 px-6">
+                                            <span class="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400">
+                                                <span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span> Pausado
+                                            </span>
+                                        </td>
+                                        <td class="py-4 px-6 text-sm text-slate-600">
+                                            <span class="font-bold text-slate-400">0</span> aplicantes
+                                        </td>
+                                        <td class="py-4 px-6 text-right">
+                                            <button class="text-xs font-bold text-[#294266] hover:text-blue-800 transition-colors">Reanudar</button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- RIGHT COLUMN (Spans 1/3 on XL) -->
+            <div class="xl:col-span-1">
+                <div class="bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-slate-100 h-full flex flex-col">
+                    
+                    <h2 class="text-lg font-bold text-[#1e3456] mb-8">Actividad Reciente</h2>
+                    
+                    <!-- Activity List -->
+                    <div class="space-y-8 flex-1">
+                        
+                        <!-- Item 1 -->
+                        <div class="flex gap-4">
+                            <div class="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-[#294266] shrink-0">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                            </div>
+                            <div>
+                                <p class="text-sm text-[#1e3456] font-medium leading-tight mb-1">Nueva aplicación para Diseñador UX Junior</p>
+                                <p class="text-[10px] text-slate-400">Hace 2 minutos</p>
+                            </div>
+                        </div>
+
+                        <!-- Item 2 -->
+                        <div class="flex gap-4">
+                            <div class="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                            </div>
+                            <div>
+                                <p class="text-sm text-[#1e3456] font-medium leading-tight mb-1">Entrevista programada con David Chen</p>
+                                <p class="text-[10px] text-slate-400">Hace 1 hora</p>
+                            </div>
+                        </div>
+
+                        <!-- Item 3 -->
+                        <div class="flex gap-4">
+                            <div class="w-8 h-8 rounded-full bg-purple-50 flex items-center justify-center text-purple-500 shrink-0">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                            </div>
+                            <div>
+                                <p class="text-sm text-[#1e3456] font-medium leading-tight mb-1">Nuevo talento de alto match identificado por IA</p>
+                                <p class="text-[10px] text-slate-400">Hace 3 horas</p>
+                            </div>
+                        </div>
+
+                        <!-- Item 4 -->
+                        <div class="flex gap-4">
+                            <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                            </div>
+                            <div>
+                                <p class="text-sm text-[#1e3456] font-medium leading-tight mb-1">Mensaje recibido de Elena Rodriguez</p>
+                                <p class="text-[10px] text-slate-400">Ayer</p>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Pro Tip Card -->
+                    <div class="bg-[#f0f4f8] rounded-xl p-5 mt-8 border border-blue-100/50">
+                        <h4 class="text-xs font-bold text-[#1e3456] mb-2">Consejo Pro</h4>
+                        <p class="text-[11px] text-slate-500 leading-relaxed mb-3">
+                            Las empresas que responden en menos de 24 horas a los candidatos de alto match tienen 4x más probabilidades de asegurar la contratación.
+                        </p>
+                        <a href="#" class="text-[11px] font-bold text-[#294266] hover:underline">Aprender Más</a>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- ========================================== -->
+    <!-- FOOTER                                     -->
+    <!-- ========================================== -->
+    <footer class="border-t border-slate-200 bg-[#f8fafc] mt-auto">
+        <div class="max-w-[1400px] mx-auto px-6 py-8 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div>
+                <span class="font-bold text-[#1e3456] text-lg tracking-tight block mb-1">FirsTep</span>
+                <p class="text-[11px] text-slate-400">© 2024 FirsTep Technologies. Todos los derechos reservados.</p>
+            </div>
+            
+            <div class="flex flex-wrap justify-center gap-x-6 gap-y-2 text-[11px] text-slate-500">
+                <a href="#" class="hover:text-[#1e3456] transition-colors">Política de Privacidad</a>
+                <a href="#" class="hover:text-[#1e3456] transition-colors">Términos de Servicio</a>
+                <a href="#" class="hover:text-[#1e3456] transition-colors">Config. de Cookies</a>
+                <a href="#" class="hover:text-[#1e3456] transition-colors">Soporte</a>
+                <a href="#" class="hover:text-[#1e3456] transition-colors">Sobre Nosotros</a>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>

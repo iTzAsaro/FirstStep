@@ -1,0 +1,51 @@
+import { Navigate, Route, Routes } from "react-router-dom";
+
+import { ProtectedRoute } from "@/app/router/ProtectedRoute";
+import { DashboardCompanyPage } from "@/pages/dashboard-company";
+import { DashboardUserPage } from "@/pages/dashboard-user";
+import { LandingPage } from "@/pages/landing";
+import { LoginCompanyPage } from "@/pages/login-company";
+import { LoginPortalPage } from "@/pages/login-portal";
+import { LoginUserPage } from "@/pages/login-user";
+import { OnboardingUserPage } from "@/pages/onboarding-user";
+import { SignUpCompanyPage } from "@/pages/signup-company";
+import { SignUpTalentPage } from "@/pages/signup-talent";
+import { routes } from "@/shared/config/routes";
+
+export function AppRouter() {
+  return (
+    <Routes>
+      <Route path={routes.home} element={<LandingPage />} />
+      <Route path={routes.portal} element={<LoginPortalPage />} />
+      <Route path={routes.login} element={<LoginUserPage />} />
+      <Route path={routes.talentSignUp} element={<SignUpTalentPage />} />
+      <Route path={routes.companyLogin} element={<LoginCompanyPage />} />
+      <Route path={routes.companySignUp} element={<SignUpCompanyPage />} />
+      <Route
+        path={routes.companyDashboard}
+        element={
+          <ProtectedRoute role="empresa">
+            <DashboardCompanyPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path={routes.onboarding}
+        element={
+          <ProtectedRoute role="talento">
+            <OnboardingUserPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path={routes.dashboard}
+        element={
+          <ProtectedRoute role="talento">
+            <DashboardUserPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="*" element={<Navigate to={routes.home} replace />} />
+    </Routes>
+  );
+}
