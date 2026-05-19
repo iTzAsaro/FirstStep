@@ -1,8 +1,11 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import { ProtectedRoute } from "@/app/router/ProtectedRoute";
+import { ChatPage } from "@/pages/chat";
 import { DashboardCompanyPage } from "@/pages/dashboard-company";
 import { DashboardUserPage } from "@/pages/dashboard-user";
+import { CvBuilderPage } from "@/pages/cv-builder";
+import { InterviewPage } from "@/pages/interview";
 import { LandingPage } from "@/pages/landing";
 import { LoginCompanyPage } from "@/pages/login-company";
 import { LoginPortalPage } from "@/pages/login-portal";
@@ -42,6 +45,30 @@ export function AppRouter() {
         element={
           <ProtectedRoute role="talento">
             <DashboardUserPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path={routes.cvBuilder}
+        element={
+          <ProtectedRoute role="talento">
+            <CvBuilderPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path={routes.chat}
+        element={
+          <ProtectedRoute role="talento">
+            <ChatPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path={routes.interview}
+        element={
+          <ProtectedRoute role="talento">
+            <InterviewPage />
           </ProtectedRoute>
         }
       />

@@ -6,6 +6,9 @@ export const routes = {
   companyLogin: "/empresa/login",
   companySignUp: "/empresa/registro",
   companyDashboard: "/empresa/dashboard",
+  cvBuilder: "/cv",
+  chat: "/chat",
+  interview: "/entrevista",
   onboarding: "/onboarding",
   dashboard: "/dashboard",
 } as const;
