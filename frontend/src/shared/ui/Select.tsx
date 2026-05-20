@@ -1,9 +1,19 @@
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║ Archivo:     Select.tsx                                              ║
+// ║ Módulo:      frontend/src/shared/ui                                  ║
+// ║ Descripción: Select reutilizable con estilos base (Tailwind).         ║
+// ║ Creado:      20-05-2026                                              ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
 import type { SelectHTMLAttributes } from "react";
 
 import { cn } from "@/shared/lib/cn";
 
 type Props = SelectHTMLAttributes<HTMLSelectElement>;
 
+/**
+ * Select HTML estilizado.
+ */
 export function Select({ className, ...props }: Props) {
   return (
     <select

@@ -1,3 +1,10 @@
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║ Archivo:     Button.tsx                                              ║
+// ║ Módulo:      frontend/src/shared/ui                                  ║
+// ║ Descripción: Botón reutilizable con variantes y tamaños (Tailwind).   ║
+// ║ Creado:      20-05-2026                                              ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
 import type { ButtonHTMLAttributes } from "react";
 
 import { cn } from "@/shared/lib/cn";
@@ -29,6 +36,13 @@ export function Button({
   className,
   ...props
 }: Props) {
+  /**
+   * Componente presentacional que combina:
+   * - Clases base
+   * - Variante
+   * - Tamaño
+   * - className adicional
+   */
   return (
     <button
       className={cn(base, variants[variant], sizes[size], className)}

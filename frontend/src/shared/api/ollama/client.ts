@@ -1,3 +1,10 @@
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║ Archivo:     client.ts                                               ║
+// ║ Módulo:      frontend/src/shared/api/ollama                          ║
+// ║ Descripción: Cliente HTTP para Ollama con soporte de streaming.       ║
+// ║ Creado:      20-05-2026                                              ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
 import type { OllamaChatChunk, OllamaChatRequest, OllamaMessage, OllamaTagsResponse } from "@/shared/api/ollama/types";
 
 export type OllamaClientConfig = {
@@ -12,6 +19,9 @@ export type StreamChatParams = {
   onDone?: () => void;
 };
 
+/**
+ * Error tipado para categorizar fallos al hablar con Ollama.
+ */
 export class OllamaError extends Error {
   readonly kind: "network" | "http" | "model" | "protocol";
   readonly status?: number;
@@ -28,17 +38,29 @@ function toText(err: unknown) {
   return String(err);
 }
 
+/**
+ * Detecta abortos de fetch (AbortController / AbortSignal).
+ */
 function isAbortError(err: unknown) {
   if (err instanceof DOMException && err.name === "AbortError") return true;
   if (err instanceof Error && err.name === "AbortError") return true;
   return false;
 }
 
+/**
+ * Normaliza el baseUrl.
+ *
+ * En desarrollo usa el proxy de Vite (/ollama).
+ * En producción apunta a http://localhost:11434 (Ollama local).
+ */
 function normalizeBaseUrl(baseUrl?: string) {
   const fallback = import.meta.env.DEV ? "/ollama" : "http://localhost:11434";
   return baseUrl?.replace(/\/+$/, "") ?? fallback;
 }
 
+/**
+ * Parsea JSON de forma segura, lanzando un error "protocol" si el payload no es JSON válido.
+ */
 async function safeJson<T>(res: Response): Promise<T> {
   try {
     return (await res.json()) as T;
@@ -47,9 +69,20 @@ async function safeJson<T>(res: Response): Promise<T> {
   }
 }
 
+/**
+ * Crea un cliente de Ollama.
+ *
+ * Responsabilidades:
+ * - Listar modelos disponibles (GET /api/tags)
+ * - Verificar disponibilidad de un modelo
+ * - Ejecutar chat con streaming NDJSON (POST /api/chat)
+ */
 export function createOllamaClient(config: OllamaClientConfig = {}) {
   const baseUrl = normalizeBaseUrl(config.baseUrl);
 
+  /**
+   * Lista modelos instalados en Ollama.
+   */
   async function listModels(signal?: AbortSignal) {
     let res: Response;
     try {
@@ -67,12 +100,20 @@ export function createOllamaClient(config: OllamaClientConfig = {}) {
     return data.models ?? [];
   }
 
+  /**
+   * Verifica si existe un modelo (por prefijo) dentro de /api/tags.
+   */
   async function hasModel(model: string, signal?: AbortSignal) {
     const models = await listModels(signal);
     const wanted = model.toLowerCase();
     return models.some((m) => (m.name ?? "").toLowerCase().startsWith(wanted));
   }
 
+  /**
+   * Envía un chat a Ollama y procesa el streaming NDJSON emitiendo tokens en onToken.
+   *
+   * Nota: el streaming de Ollama viene en líneas JSON separadas por '\n'.
+   */
   async function streamChat(params: StreamChatParams) {
     const request: OllamaChatRequest = {
       model: params.model,
@@ -109,6 +150,9 @@ export function createOllamaClient(config: OllamaClientConfig = {}) {
     const decoder = new TextDecoder();
     let buffer = "";
 
+    /**
+     * Procesa una línea NDJSON del stream.
+     */
     function handleLine(line: string) {
       const trimmed = line.trim();
       if (!trimmed) return;

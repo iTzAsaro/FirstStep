@@ -1,3 +1,10 @@
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║ Archivo:     CvBuilderPage.tsx                                       ║
+// ║ Módulo:      frontend/src/pages/cv-builder/ui                        ║
+// ║ Descripción: Generador de CV (UI mock) con chat guiado y vista previa║
+// ║ Creado:      20-05-2026                                              ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -22,10 +29,16 @@ type EducationItem = {
   period: string;
 };
 
+/**
+ * Genera un id simple para mensajes de chat/elementos de UI.
+ */
 function makeId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+/**
+ * Retorna clases utilitarias según el tema del CV.
+ */
 function themeClasses(theme: CvTheme) {
   if (theme === "blue") {
     return { border: "border-blue-600", title: "text-blue-600" };
@@ -39,6 +52,11 @@ function themeClasses(theme: CvTheme) {
   return { border: "border-slate-900", title: "text-slate-900" };
 }
 
+/**
+ * Página de generación/edición de CV basada en mock.
+ *
+ * Nota: este módulo es UI-first y no depende de Ollama; simula un flujo conversacional.
+ */
 export function CvBuilderPage() {
   const session = useSession();
   const bottomRef = useRef<HTMLDivElement | null>(null);

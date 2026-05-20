@@ -1,3 +1,10 @@
+// ╔═══════════════════════════════════════════════════════════════════════╗
+// ║ Archivo:     InterviewPage.tsx                                        ║
+// ║ Módulo:      frontend/src/pages/interview/ui                          ║
+// ║ Descripción: Simulador de entrevistas con Ollama (settings + feedback)║
+// ║ Creado:      20-05-2026                                               ║
+// ╚═══════════════════════════════════════════════════════════════════════╝
+
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Link } from "react-router-dom";
@@ -11,20 +18,32 @@ import { Button } from "@/shared/ui";
 
 const DEFAULT_MODEL = "llama3.1";
 
+/**
+ * Timestamp actual en ms.
+ */
 function now() {
   return Date.now();
 }
 
+/**
+ * Detecta abortos del streaming (AbortController).
+ */
 function isAbortError(err: unknown) {
   if (err instanceof DOMException && err.name === "AbortError") return true;
   if (err instanceof Error && err.name === "AbortError") return true;
   return false;
 }
 
+/**
+ * Formatea timestamps para la UI.
+ */
 function formatTime(ts: number) {
   return new Date(ts).toLocaleString();
 }
 
+/**
+ * Construye el system prompt que configura al modelo como entrevistador.
+ */
 function makeSystemPrompt(settings: InterviewSettings) {
   return [
     "Eres un entrevistador profesional y estricto, pero justo.",
@@ -60,11 +79,24 @@ function makeSystemPrompt(settings: InterviewSettings) {
   ].join("\n");
 }
 
+/**
+ * Construye un título legible a partir de los settings de la entrevista.
+ */
 function buildTitle(settings: InterviewSettings) {
   const role = settings.role.trim() || "Entrevista";
   return `${role} · ${settings.interviewType} · ${settings.difficulty}`;
 }
 
+/**
+ * Página de simulación de entrevistas.
+ *
+ * Funcionalidades:
+ * - Configuración (puesto, tipo, dificultad, modelo)
+ * - Sesiones persistidas en localStorage
+ * - Streaming NDJSON token a token
+ * - Detener (AbortController)
+ * - Reiniciar entrevista conservando el system prompt
+ */
 export function InterviewPage() {
   const client = useMemo(() => createOllamaClient(), []);
   const {

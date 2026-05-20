@@ -1,3 +1,10 @@
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║ Archivo:     store.ts                                                ║
+// ║ Módulo:      frontend/src/entities/ollama-session/model              ║
+// ║ Descripción: Store de sesiones de chat/entrevista persistidas.       ║
+// ║ Creado:      20-05-2026                                              ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { OllamaMessage } from "@/shared/api/ollama/types";
@@ -7,30 +14,51 @@ import type { InterviewSettings, OllamaSession, OllamaSessionsState, SessionKind
 
 const STORAGE_KEY = "firststep.ollama.sessions.v1";
 
+/**
+ * Timestamp actual en ms.
+ */
 function now() {
   return Date.now();
 }
 
+/**
+ * Genera un id simple para sesiones en el cliente.
+ */
 function makeId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+/**
+ * Estado inicial vacío.
+ */
 function defaultState(): OllamaSessionsState {
   return { sessions: [], activeSessionIdByKind: {} };
 }
 
+/**
+ * Carga el estado desde localStorage.
+ */
 function loadState(): OllamaSessionsState {
   return readJson<OllamaSessionsState>(STORAGE_KEY) ?? defaultState();
 }
 
+/**
+ * Persiste el estado en localStorage.
+ */
 function saveState(state: OllamaSessionsState) {
   writeJson(STORAGE_KEY, state);
 }
 
+/**
+ * Obtiene una sesión por id dentro del estado.
+ */
 function findSession(state: OllamaSessionsState, id: string) {
   return state.sessions.find((s) => s.id === id) ?? null;
 }
 
+/**
+ * Inserta o actualiza una sesión dentro del estado (ordenando por updatedAt descendente).
+ */
 function updateSessionInState(state: OllamaSessionsState, session: OllamaSession) {
   const idx = state.sessions.findIndex((s) => s.id === session.id);
   if (idx === -1) return { ...state, sessions: [session, ...state.sessions] };
@@ -40,6 +68,14 @@ function updateSessionInState(state: OllamaSessionsState, session: OllamaSession
   return { ...state, sessions: next };
 }
 
+/**
+ * Hook de estado para gestionar sesiones de:
+ * - Chat general
+ * - Simulación de entrevistas
+ *
+ * Persistencia:
+ * - localStorage (STORAGE_KEY)
+ */
 export function useOllamaSessions() {
   const [state, setState] = useState<OllamaSessionsState>(() => loadState());
 
@@ -103,10 +139,16 @@ export function useOllamaSessions() {
     [],
   );
 
+  /**
+   * Inserta o actualiza una sesión existente.
+   */
   const upsertSession = useCallback((session: OllamaSession) => {
     setState((prev) => updateSessionInState(prev, { ...session, updatedAt: now() }));
   }, []);
 
+  /**
+   * Reemplaza los mensajes de una sesión (útil para reiniciar conversación).
+   */
   const resetSessionMessages = useCallback((id: string, nextMessages: OllamaMessage[] = []) => {
     setState((prev) => {
       const current = findSession(prev, id);
@@ -116,6 +158,9 @@ export function useOllamaSessions() {
     });
   }, []);
 
+  /**
+   * Elimina una sesión y limpia selección activa si correspondía.
+   */
   const deleteSession = useCallback((id: string) => {
     setState((prev) => {
       const nextSessions = prev.sessions.filter((s) => s.id !== id);

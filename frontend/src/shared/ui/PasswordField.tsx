@@ -1,3 +1,10 @@
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║ Archivo:     PasswordField.tsx                                       ║
+// ║ Módulo:      frontend/src/shared/ui                                  ║
+// ║ Descripción: Input de contraseña con botón para mostrar/ocultar.      ║
+// ║ Creado:      20-05-2026                                              ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
 import type { ChangeEvent } from "react";
 import { useState } from "react";
 
@@ -10,6 +17,9 @@ type Props = {
   className?: string;
 };
 
+/**
+ * Campo de contraseña que permite alternar visibilidad.
+ */
 export function PasswordField({ value, onChange, placeholder, className }: Props) {
   const [isVisible, setIsVisible] = useState<boolean>(false);
 

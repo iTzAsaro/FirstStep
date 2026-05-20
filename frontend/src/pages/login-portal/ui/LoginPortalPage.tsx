@@ -1,3 +1,10 @@
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║ Archivo:     LoginPortalPage.tsx                                     ║
+// ║ Módulo:      frontend/src/pages/login-portal/ui                      ║
+// ║ Descripción: Portal de acceso con opciones para talento y empresas.  ║
+// ║ Creado:      20-05-2026                                              ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
 import { useMemo, useState } from "react";
 
 import { Link, useNavigate } from "react-router-dom";
@@ -6,6 +13,10 @@ import { useLoginTalent } from "@/features/auth/login-talent/model/useLoginTalen
 import { routes } from "@/shared/config/routes";
 import { Button, Input } from "@/shared/ui";
 
+/**
+ * Renderiza un portal de login que guía al usuario a los flujos de talento o
+ * empresa. Para talento incluye un formulario simplificado.
+ */
 export function LoginPortalPage() {
   const navigate = useNavigate();
   const loginTalent = useLoginTalent();

@@ -1,3 +1,10 @@
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║ Archivo:     SignUpTalentPage.tsx                                    ║
+// ║ Módulo:      frontend/src/pages/signup-talent/ui                     ║
+// ║ Descripción: Registro de talento (mock) con validaciones básicas.    ║
+// ║ Creado:      20-05-2026                                              ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
 import { useMemo, useState } from "react";
 
 import { Link } from "react-router-dom";
@@ -6,6 +13,10 @@ import { useTalentSignUp } from "@/features/auth/signup-talent/model/useTalentSi
 import { routes } from "@/shared/config/routes";
 import { Button, Checkbox, Input, PasswordField } from "@/shared/ui";
 
+/**
+ * Renderiza el formulario de registro para talento.
+ * En el mock actual, crea una sesión local y redirige a onboarding.
+ */
 export function SignUpTalentPage() {
   const signUp = useTalentSignUp();
 

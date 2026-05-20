@@ -1,3 +1,10 @@
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║ Archivo:     ChatPage.tsx                                            ║
+// ║ Módulo:      frontend/src/pages/chat/ui                              ║
+// ║ Descripción: Chat general con Ollama (streaming + sesiones locales). ║
+// ║ Creado:      20-05-2026                                              ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Link } from "react-router-dom";
@@ -11,31 +18,56 @@ import { Button } from "@/shared/ui";
 
 const DEFAULT_MODEL = "llama3.1";
 
+/**
+ * Timestamp actual en ms.
+ */
 function now() {
   return Date.now();
 }
 
+/**
+ * Detecta abortos del streaming (AbortController).
+ */
 function isAbortError(err: unknown) {
   if (err instanceof DOMException && err.name === "AbortError") return true;
   if (err instanceof Error && err.name === "AbortError") return true;
   return false;
 }
 
+/**
+ * Formatea timestamps para la UI.
+ */
 function formatTime(ts: number) {
   return new Date(ts).toLocaleString();
 }
 
+/**
+ * Recorta un texto para título de sesión.
+ */
 function trimTitle(text: string) {
   const cleaned = text.trim().replace(/\s+/g, " ");
   if (cleaned.length <= 42) return cleaned;
   return `${cleaned.slice(0, 42)}…`;
 }
 
+/**
+ * Construye un título a partir del primer mensaje del usuario.
+ */
 function buildTitleFromMessages(messages: OllamaMessage[]) {
   const firstUser = messages.find((m) => m.role === "user")?.content ?? "Nueva conversación";
   return trimTitle(firstUser);
 }
 
+/**
+ * Página de chat general.
+ *
+ * Funcionalidades:
+ * - Sesiones persistidas en localStorage
+ * - Streaming NDJSON token a token
+ * - Detener (AbortController)
+ * - Reiniciar conversación
+ * - Manejo de errores y verificación de modelos
+ */
 export function ChatPage() {
   const client = useMemo(() => createOllamaClient(), []);
   const { sessionsByKind, getActiveSession, setActiveSession, createSession, upsertSession, resetSessionMessages, deleteSession } =

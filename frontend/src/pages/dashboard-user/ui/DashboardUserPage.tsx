@@ -1,3 +1,10 @@
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║ Archivo:     DashboardUserPage.tsx                                   ║
+// ║ Módulo:      frontend/src/pages/dashboard-user/ui                    ║
+// ║ Descripción: Dashboard mock del usuario con estadísticas y panel UI. ║
+// ║ Creado:      20-05-2026                                              ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
 import type { ReactNode } from "react";
 import { useMemo } from "react";
 
@@ -39,6 +46,10 @@ type ActivityItem = {
   icon: ReactNode;
 };
 
+/**
+ * Renderiza el dashboard principal del usuario (talento) en modo mock.
+ * La información presentada es estática y sirve como base visual del producto.
+ */
 export function DashboardUserPage() {
   const session = useSession();
   const navigate = useNavigate();

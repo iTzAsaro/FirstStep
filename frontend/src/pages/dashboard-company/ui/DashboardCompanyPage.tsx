@@ -1,3 +1,10 @@
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║ Archivo:     DashboardCompanyPage.tsx                                ║
+// ║ Módulo:      frontend/src/pages/dashboard-company/ui                 ║
+// ║ Descripción: Dashboard mock para empresas (flujo de acceso básico).  ║
+// ║ Creado:      20-05-2026                                              ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
 import { Link } from "react-router-dom";
 
 import { useSession } from "@/entities/session";
@@ -5,6 +12,10 @@ import { useLogout } from "@/features/auth/logout/model/useLogout";
 import { routes } from "@/shared/config/routes";
 import { Button } from "@/shared/ui";
 
+/**
+ * Renderiza el dashboard de empresa para el flujo de demo/mock.
+ * Muestra información básica de sesión y permite cerrar sesión.
+ */
 export function DashboardCompanyPage() {
   const session = useSession();
   const logout = useLogout();

@@ -1,3 +1,10 @@
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║ Archivo:     OnboardingUserPage.tsx                                  ║
+// ║ Módulo:      frontend/src/pages/onboarding-user/ui                   ║
+// ║ Descripción: Pantalla de onboarding para completar perfil (mock).    ║
+// ║ Creado:      20-05-2026                                              ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
 import { useMemo, useRef, useState } from "react";
 
 import { useSession } from "@/entities/session";
@@ -16,6 +23,10 @@ const DEFAULT_CAREERS = [
   "Arquitectura Cloud",
 ];
 
+/**
+ * Renderiza el flujo de onboarding para completar información del perfil.
+ * Al finalizar, marca la sesión como "onboarded" y redirige al dashboard.
+ */
 export function OnboardingUserPage() {
   const session = useSession();
   const completeOnboarding = useCompleteOnboarding();

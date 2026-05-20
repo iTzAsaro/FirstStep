@@ -1,3 +1,10 @@
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║ Archivo:     Input.tsx                                               ║
+// ║ Módulo:      frontend/src/shared/ui                                  ║
+// ║ Descripción: Input reutilizable con slots opcionales (izq/der).       ║
+// ║ Creado:      20-05-2026                                              ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
 import type { InputHTMLAttributes, ReactNode } from "react";
 
 import { cn } from "@/shared/lib/cn";
@@ -7,6 +14,9 @@ type Props = InputHTMLAttributes<HTMLInputElement> & {
   rightSlot?: ReactNode;
 };
 
+/**
+ * Input con soporte de iconos/slots en los laterales.
+ */
 export function Input({ className, leftSlot, rightSlot, ...props }: Props) {
   return (
     <div className="relative">

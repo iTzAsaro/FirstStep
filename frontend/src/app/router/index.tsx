@@ -1,3 +1,10 @@
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║ Archivo:     index.tsx                                               ║
+// ║ Módulo:      frontend/src/app/router                                 ║
+// ║ Descripción: Definición de rutas de la SPA (React Router).           ║
+// ║ Creado:      20-05-2026                                              ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import { ProtectedRoute } from "@/app/router/ProtectedRoute";
@@ -15,6 +22,11 @@ import { SignUpCompanyPage } from "@/pages/signup-company";
 import { SignUpTalentPage } from "@/pages/signup-talent";
 import { routes } from "@/shared/config/routes";
 
+/**
+ * Router principal de la aplicación.
+ *
+ * Define rutas públicas y rutas protegidas por rol (talento/empresa).
+ */
 export function AppRouter() {
   return (
     <Routes>

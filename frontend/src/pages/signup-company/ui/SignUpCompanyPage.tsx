@@ -1,3 +1,10 @@
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║ Archivo:     SignUpCompanyPage.tsx                                   ║
+// ║ Módulo:      frontend/src/pages/signup-company/ui                    ║
+// ║ Descripción: Registro de empresa (mock) con datos de organización.   ║
+// ║ Creado:      20-05-2026                                              ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
 import { useMemo, useState } from "react";
 
 import { Link } from "react-router-dom";
@@ -14,6 +21,10 @@ const COMPANY_SIZES = [
   { value: "500+", label: "500+ empleados" },
 ];
 
+/**
+ * Renderiza el formulario de registro para empresas.
+ * En el mock actual, crea una sesión local de empresa y redirige al dashboard.
+ */
 export function SignUpCompanyPage() {
   const signUp = useCompanySignUp();
 

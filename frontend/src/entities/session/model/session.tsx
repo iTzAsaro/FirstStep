@@ -1,3 +1,10 @@
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║ Archivo:     session.tsx                                             ║
+// ║ Módulo:      frontend/src/entities/session/model                     ║
+// ║ Descripción: Contexto/hook de sesión mock con persistencia local.    ║
+// ║ Creado:      20-05-2026                                              ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
 import type { ReactNode } from "react";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
@@ -14,6 +21,9 @@ const defaultState: SessionState = {
   onboardingCompleted: false,
 };
 
+/**
+ * Normaliza un nombre visible a partir del email.
+ */
 function normalizeNameFromEmail(email: string) {
   const raw = email.split("@")[0] ?? "";
   const cleaned = raw.trim().replaceAll(".", " ").replaceAll("_", " ");
@@ -23,6 +33,12 @@ function normalizeNameFromEmail(email: string) {
 
 const SessionContext = createContext<SessionApi | null>(null);
 
+/**
+ * Provider de sesión (mock).
+ *
+ * Persistencia:
+ * - Guarda en localStorage (STORAGE_KEY)
+ */
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<SessionState>(() => {
     const persisted = readJson<SessionState>(STORAGE_KEY);
@@ -40,6 +56,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const api: SessionApi = useMemo(() => {
     return {
       ...state,
+      /**
+       * Login de Talento (mock).
+       */
       loginTalent: ({ email }) => {
         setState({
           isAuthenticated: true,
@@ -49,6 +68,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           onboardingCompleted: false,
         });
       },
+      /**
+       * Login de Empresa (mock).
+       */
       loginCompany: ({ companyName, email }) => {
         setState({
           isAuthenticated: true,
@@ -58,12 +80,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           onboardingCompleted: true,
         });
       },
+      /**
+       * Marca onboarding como completado.
+       */
       completeOnboarding: () => {
         setState((prev) => ({
           ...prev,
           onboardingCompleted: true,
         }));
       },
+      /**
+       * Cierra sesión y limpia persistencia.
+       */
       logout: () => {
         removeItem(STORAGE_KEY);
         setState(defaultState);
@@ -74,6 +102,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   return <SessionContext.Provider value={api}>{children}</SessionContext.Provider>;
 }
 
+/**
+ * Hook para consumir la sesión.
+ */
 export function useSession() {
   const ctx = useContext(SessionContext);
   if (!ctx) {

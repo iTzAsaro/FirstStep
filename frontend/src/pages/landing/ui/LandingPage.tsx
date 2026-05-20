@@ -1,8 +1,19 @@
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║ Archivo:     LandingPage.tsx                                         ║
+// ║ Módulo:      frontend/src/pages/landing/ui                           ║
+// ║ Descripción: Landing pública con secciones informativas y accesos.   ║
+// ║ Creado:      20-05-2026                                              ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
 import { Link } from "react-router-dom";
 
 import { routes } from "@/shared/config/routes";
 import { Button } from "@/shared/ui";
 
+/**
+ * Renderiza la página de inicio pública (marketing) con anclas de navegación y
+ * accesos a login/registro para talento y empresas.
+ */
 export function LandingPage() {
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-800">
@@ -214,7 +225,7 @@ export function LandingPage() {
               </p>
               <div className="mt-6 flex flex-col sm:flex-row gap-3">
                 <Link to={routes.companyLogin} className="w-full sm:w-auto">
-                  <Button className="w-full sm:w-auto rounded-full px-7 bg-white text-[#111827] hover:bg-slate-100">
+                  <Button className="w-full sm:w-auto rounded-full px-7 bg-white text-black hover:bg-slate-100">
                     Login
                   </Button>
                 </Link>
