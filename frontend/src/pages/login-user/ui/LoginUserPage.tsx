@@ -1,4 +1,12 @@
-import { useMemo, useState } from "react";
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║ Archivo:     LoginUserPage.tsx                                       ║
+// ║ Módulo:      frontend/src/pages/login-user/ui                        ║
+// ║ Descripción: Pantalla de inicio de sesión para talento (mock).       ║
+// ║ Creado:      20-05-2026                                              ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
+import { createClient } from "@supabase/supabase-js";
+import { useEffect, useMemo, useState } from "react";
 
 import { Link } from "react-router-dom";
 
@@ -6,11 +14,78 @@ import { useLoginTalent } from "@/features/auth/login-talent/model/useLoginTalen
 import { routes } from "@/shared/config/routes";
 import { Button, Input, PasswordField } from "@/shared/ui";
 
+/**
+ * Renderiza el formulario de login para usuarios (talento).
+ * En el mock actual, el login persiste sesión local y redirige a onboarding.
+ */
 export function LoginUserPage() {
   const loginTalent = useLoginTalent();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [oauthError, setOauthError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get("code");
+    if (!code) return;
+
+    let alive = true;
+
+    (async () => {
+      try {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+        const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+        if (!supabaseUrl || !supabaseAnonKey) {
+          throw new Error("Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY.");
+        }
+
+        const supabase = createClient(supabaseUrl, supabaseAnonKey);
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+        if (exchangeError) throw exchangeError;
+
+        const { data } = await supabase.auth.getSession();
+        const session = data.session;
+        const accessToken = session?.access_token;
+        const userEmail = session?.user?.email ?? null;
+
+        if (accessToken) {
+          const res = await fetch("/api/auth/login/google", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ role: "talento" }),
+          });
+
+          if (!res.ok) {
+            const text = await res.text().catch(() => "");
+            throw new Error(text || `Login Google falló (${res.status}).`);
+          }
+
+          const out = (await res.json()) as { accessToken?: string };
+          if (out.accessToken) localStorage.setItem("firststep.api.accessToken", out.accessToken);
+        }
+
+        if (!alive) return;
+        if (!userEmail) throw new Error("No se pudo obtener el email del usuario.");
+        loginTalent({ email: userEmail });
+      } catch (e) {
+        if (!alive) return;
+        const msg = e instanceof Error ? e.message : String(e);
+        setOauthError(msg);
+      } finally {
+        if (alive) {
+          window.history.replaceState({}, document.title, routes.login);
+        }
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [loginTalent]);
 
   const isSubmitDisabled = useMemo(() => {
     return email.trim().length === 0 || password.trim().length === 0;
@@ -75,6 +150,26 @@ export function LoginUserPage() {
               <button
                 type="button"
                 className="flex items-center justify-center gap-2 border border-slate-200 rounded-xl py-3 font-medium text-slate-600 hover:bg-slate-50 transition-colors text-sm"
+                onClick={async () => {
+                  setOauthError(null);
+                  try {
+                    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+                    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+                    if (!supabaseUrl || !supabaseAnonKey) {
+                      throw new Error("Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY.");
+                    }
+
+                    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+                    const { error } = await supabase.auth.signInWithOAuth({
+                      provider: "google",
+                      options: { redirectTo: `${window.location.origin}${routes.login}` },
+                    });
+                    if (error) throw error;
+                  } catch (e) {
+                    const msg = e instanceof Error ? e.message : String(e);
+                    setOauthError(msg);
+                  }
+                }}
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
                   <path
@@ -106,6 +201,12 @@ export function LoginUserPage() {
                 LinkedIn
               </button>
             </div>
+
+            {oauthError ? (
+              <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {oauthError}
+              </div>
+            ) : null}
 
             <div className="flex items-center gap-4 mb-8">
               <div className="h-px bg-slate-200 flex-1" />
