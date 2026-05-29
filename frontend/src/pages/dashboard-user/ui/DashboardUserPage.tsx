@@ -6,7 +6,7 @@
 // ╚══════════════════════════════════════════════════════════════════════╝
 
 import type { ReactNode } from "react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useNavigate } from "react-router-dom";
 
@@ -20,23 +20,6 @@ type StatCard = {
   value: string;
   badge?: { text: string; tone: "success" | "neutral" };
   highlight?: boolean;
-};
-
-type TalentCard = {
-  name: string;
-  role: string;
-  match: string;
-  tag: string;
-  avatarUrl: string;
-  description: string;
-};
-
-type JobRow = {
-  role: string;
-  published: string;
-  status: "Activo" | "Pausado";
-  applicants: number;
-  action: string;
 };
 
 type ActivityItem = {
@@ -55,174 +38,113 @@ export function DashboardUserPage() {
   const navigate = useNavigate();
   const logout = useLogout();
 
-  const name = session.userName ?? "Alex";
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [data, setData] = useState<any>(null);
 
-  const stats: StatCard[] = useMemo(
-    () => [
-      {
-        title: "Trabajos Activos",
-        value: "08",
-        badge: { text: "+2 este mes", tone: "success" },
-      },
-      {
-        title: "Aplicaciones Totales",
-        value: "342",
-      },
-      {
-        title: "Entrevistas Pendientes",
-        value: "14",
-      },
-      {
-        title: "Prom. Match con IA",
-        value: "92%",
-        highlight: true,
-      },
-    ],
-    [],
-  );
+  useEffect(() => {
+    let alive = true;
+    const token = localStorage.getItem("firststep.api.accessToken") ?? "";
+    if (!token) {
+      setIsLoading(false);
+      setLoadError("No hay sesión válida. Vuelve a iniciar sesión.");
+      return;
+    }
 
-  const talent: TalentCard[] = useMemo(
-    () => [
-      {
-        name: "Sarah Jenkins",
-        role: "Diseñadora de Producto Senior",
-        match: "98% MATCH",
-        tag: "Experta en Figma",
-        avatarUrl: "https://i.pravatar.cc/150?img=44",
-        description:
-          "8+ años de experiencia en empresas SaaS de primer nivel. Experta en sistemas de diseño y flujos centrados en el usuario...",
-      },
-      {
-        name: "Marcus Thorne",
-        role: "Ingeniero Backend Lead",
-        match: "95% MATCH",
-        tag: "Node.js",
-        avatarUrl: "https://i.pravatar.cc/150?img=12",
-        description:
-          "Especializado en infraestructura de alta escala y microservicios. Previamente lideró el departamento de ingeniería en...",
-      },
-    ],
-    [],
-  );
+    (async () => {
+      try {
+        setIsLoading(true);
+        setLoadError(null);
+        const res = await fetch("/api/talent/dashboard", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) {
+          let message = `No se pudo cargar el dashboard (${res.status}).`;
+          try {
+            const out = (await res.json()) as any;
+            if (typeof out?.error?.message === "string" && out.error.message) message = out.error.message;
+          } catch { }
+          throw new Error(message);
+        }
+        const out = await res.json();
+        if (!alive) return;
+        setData(out);
+      } catch (e) {
+        if (!alive) return;
+        setLoadError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (alive) setIsLoading(false);
+      }
+    })();
 
-  const jobs: JobRow[] = useMemo(
-    () => [
-      {
-        role: "Diseñador UX Senior",
-        published: "Publicado hace 3 días",
-        status: "Activo",
-        applicants: 48,
-        action: "Gestionar",
-      },
-      {
-        role: "Director de Marketing",
-        published: "Publicado hace 1 semana",
-        status: "Activo",
-        applicants: 112,
-        action: "Gestionar",
-      },
-      {
-        role: "Ingeniero DevOps Lead",
-        published: "Borrador",
-        status: "Pausado",
-        applicants: 0,
-        action: "Reanudar",
-      },
-    ],
-    [],
-  );
+    return () => {
+      alive = false;
+    };
+  }, []);
 
-  const activity: ActivityItem[] = useMemo(
-    () => [
-      {
-        text: "Nueva aplicación para Diseñador UX Junior",
-        time: "Hace 2 minutos",
-        tone: "blue",
-        icon: (
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-            <line x1="16" y1="13" x2="8" y2="13" />
-            <line x1="16" y1="17" x2="8" y2="17" />
-            <polyline points="10 9 9 9 8 9" />
-          </svg>
-        ),
-      },
-      {
-        text: "Entrevista programada con David Chen",
-        time: "Hace 1 hora",
-        tone: "emerald",
-        icon: (
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-            <polyline points="22 4 12 14.01 9 11.01" />
-          </svg>
-        ),
-      },
-      {
-        text: "Nuevo talento de alto match identificado por IA",
-        time: "Hace 3 horas",
-        tone: "purple",
-        icon: (
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-          </svg>
-        ),
-      },
-      {
-        text: "Mensaje recibido de Elena Rodriguez",
-        time: "Ayer",
-        tone: "slate",
-        icon: (
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <rect width="20" height="16" x="2" y="4" rx="2" />
-            <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-          </svg>
-        ),
-      },
-    ],
-    [],
-  );
+  const name = (data?.profile?.fullName as string | null) ?? session.userName ?? "Alex";
+
+  const stats: StatCard[] = useMemo(() => {
+    const cvsCount = Number(data?.stats?.cvsCount ?? 0);
+    const aiSessionsCount = Number(data?.stats?.aiSessionsCount ?? 0);
+    const interviewsCount = Number(data?.stats?.interviewsCount ?? 0);
+    const profileCompleteness = Number(data?.stats?.profileCompleteness ?? 0);
+    return [
+      { title: "CVs Creados", value: String(cvsCount).padStart(2, "0") },
+      { title: "Sesiones IA", value: String(aiSessionsCount) },
+      { title: "Entrevistas IA", value: String(interviewsCount) },
+      { title: "Perfil Completo", value: `${profileCompleteness}%`, highlight: true },
+    ];
+  }, [data]);
+
+  const recentCvs = (data?.recent?.cvs ?? []) as Array<{ id: string; title: string; updatedAt: string }>;
+  const recentSessions = (data?.recent?.sessions ?? []) as Array<{ id: string; kind: string; title: string; model: string; updatedAt: string }>;
+
+  const timeAgo = (iso: string) => {
+    const t = new Date(iso).getTime();
+    if (!Number.isFinite(t)) return "Hace un momento";
+    const diff = Date.now() - t;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "Hace un momento";
+    if (mins < 60) return `Hace ${mins} min`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `Hace ${hours} h`;
+    const days = Math.floor(hours / 24);
+    return `Hace ${days} d`;
+  };
+
+  const activity: ActivityItem[] = useMemo(() => {
+    const raw = (data?.activity ?? []) as any[];
+    if (!Array.isArray(raw) || raw.length === 0) return [];
+
+    return raw.map((a) => {
+      const source = String(a.source ?? "");
+      const label = String(a.label ?? "");
+      const at = String(a.at ?? "");
+      const isCv = source === "cv";
+      const isSession = source === "ai_session";
+      const isProfile = source === "profile";
+      const tone: ActivityItem["tone"] = isCv ? "blue" : isSession ? "purple" : "emerald";
+      const icon = isCv ? (
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="16" y1="13" x2="8" y2="13" />
+          <line x1="16" y1="17" x2="8" y2="17" />
+        </svg>
+      ) : isSession ? (
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a4 4 0 0 1-4 4H7l-4 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
+        </svg>
+      ) : (
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 6 9 17l-5-5" />
+        </svg>
+      );
+      const text = isProfile ? "Perfil actualizado" : isCv ? `CV: ${label}` : `Sesión IA: ${label}`;
+      return { text, time: timeAgo(at), tone, icon } satisfies ActivityItem;
+    });
+  }, [data]);
 
   return (
     <div className="min-h-screen flex flex-col text-slate-800 bg-[#f8fafc]">
@@ -337,13 +259,25 @@ export function DashboardUserPage() {
       </nav>
 
       <main className="max-w-[1400px] mx-auto px-6 py-8 w-full flex-1">
+        {isLoading ? (
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 text-sm text-slate-600 mb-8">
+            Cargando dashboard...
+          </div>
+        ) : loadError ? (
+          <div className="bg-red-50 rounded-2xl p-4 shadow-sm border border-red-200 text-sm text-red-700 mb-8">
+            {loadError}
+          </div>
+        ) : null}
+
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-10 gap-4">
           <div>
             <h1 className="text-3xl md:text-4xl font-bold text-[#1e3456] mb-2 tracking-tight">
               Bienvenido de nuevo, {name}.
             </h1>
             <p className="text-slate-500 text-sm md:text-base">
-              Tienes 12 nuevas aplicaciones para tus roles activos hoy.
+              {data?.profile?.careerInterests?.length
+                ? `Intereses: ${(data.profile.careerInterests as string[]).slice(0, 3).join(", ")}.`
+                : "Completa tu perfil para mejorar tus recomendaciones."}
             </p>
           </div>
           <div className="flex flex-col sm:flex-row flex-wrap gap-3 w-full sm:w-auto">
@@ -387,7 +321,11 @@ export function DashboardUserPage() {
             >
               Simulación de entrevistas
             </Button>
-            <Button type="button" className="px-5 py-2.5 rounded-lg font-medium text-sm">
+            <Button
+              type="button"
+              className="px-5 py-2.5 rounded-lg font-medium text-sm"
+              onClick={() => navigate(routes.onboarding)}
+            >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 width="18"
@@ -402,7 +340,7 @@ export function DashboardUserPage() {
                 <path d="M5 12h14" />
                 <path d="M12 5v14" />
               </svg>
-              Publicar Nuevo Trabajo
+              Actualizar Perfil
             </Button>
           </div>
         </div>
@@ -495,142 +433,82 @@ export function DashboardUserPage() {
             <section>
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-[#1e3456] tracking-tight">
-                  Mejores Recomendaciones de Talento
+                  Sesiones IA Recientes
                 </h2>
-                <button type="button" className="text-xs font-semibold text-[#294266] hover:underline">
-                  Ver Todos los Matches
+                <button
+                  type="button"
+                  className="text-xs font-semibold text-[#294266] hover:underline"
+                  onClick={() => navigate(routes.chat)}
+                >
+                  Ir al chat
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {talent.map((t) => (
-                  <div
-                    key={t.name}
-                    className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 flex flex-col"
-                  >
-                    <div className="flex items-start gap-4 mb-4">
-                      <img
-                        src={t.avatarUrl}
-                        alt=""
-                        className="w-14 h-14 rounded-xl object-cover border border-slate-100"
-                      />
-                      <div>
-                        <h3 className="font-bold text-[#1e3456] text-lg">{t.name}</h3>
-                        <p className="text-xs text-slate-500 mb-2">{t.role}</p>
-                        <div className="flex flex-wrap gap-2">
-                          <span className="bg-blue-50 text-[#294266] text-[9px] font-bold tracking-wider px-2 py-1 rounded-md">
-                            {t.match}
-                          </span>
-                          <span className="bg-slate-100 text-slate-600 text-[9px] font-bold tracking-wider px-2 py-1 rounded-md uppercase">
-                            {t.tag}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <p className="text-xs text-slate-500 leading-relaxed mb-6 flex-1">{t.description}</p>
-                    <div className="flex gap-3">
-                      <button
-                        type="button"
-                        className="flex-1 bg-[#294266] text-white py-2.5 rounded-lg text-xs font-semibold hover:bg-[#1a2b44] transition-colors"
-                      >
-                        Invitar a Aplicar
-                      </button>
-                      <button
-                        type="button"
-                        className="p-2.5 border border-slate-200 rounded-lg text-slate-400 hover:text-[#294266] hover:border-[#294266] transition-colors"
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" />
-                        </svg>
-                      </button>
-                    </div>
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                {recentSessions.length === 0 ? (
+                  <div className="p-6">
+                    <p className="text-sm text-slate-500">
+                      Aún no tienes sesiones. Ve a Chat o Simulación de entrevistas para crear una.
+                    </p>
                   </div>
-                ))}
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {recentSessions.map((s) => (
+                      <div key={s.id} className="px-6 py-4 flex items-center justify-between gap-4">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-[#1e3456] truncate">{s.title}</p>
+                          <p className="text-[11px] text-slate-400 mt-1">
+                            {s.kind === "interview" ? "Entrevista" : "Chat"} · {s.model}
+                          </p>
+                        </div>
+                        <span className="text-[11px] text-slate-400 whitespace-nowrap">
+                          {timeAgo(s.updatedAt)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </section>
 
             <section>
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-[#1e3456] tracking-tight">
-                  Ofertas de Trabajo Activas
+                  CVs Recientes
                 </h2>
-                <button type="button" className="text-slate-400 hover:text-[#294266] transition-colors">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <circle cx="12" cy="12" r="1" />
-                    <circle cx="19" cy="12" r="1" />
-                    <circle cx="5" cy="12" r="1" />
-                  </svg>
+                <button
+                  type="button"
+                  className="text-xs font-semibold text-[#294266] hover:underline"
+                  onClick={() => navigate(routes.cvBuilder)}
+                >
+                  Ir al CV
                 </button>
               </div>
 
               <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-[#f8fafc] border-b border-slate-100 text-[10px] uppercase tracking-widest text-slate-400">
-                        <th className="py-4 px-6 font-bold">Nombre del Rol</th>
-                        <th className="py-4 px-6 font-bold">Estado</th>
-                        <th className="py-4 px-6 font-bold">Aplicantes</th>
-                        <th className="py-4 px-6 font-bold text-right">Acción</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {jobs.map((j) => (
-                        <tr
-                          key={j.role}
-                          className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors last:border-b-0"
+                {recentCvs.length === 0 ? (
+                  <div className="p-6">
+                    <p className="text-sm text-slate-500">Aún no tienes CVs. Crea uno para empezar.</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {recentCvs.map((cv) => (
+                      <div key={cv.id} className="px-6 py-4 flex items-center justify-between gap-4">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-[#1e3456] truncate">{cv.title}</p>
+                          <p className="text-[11px] text-slate-400 mt-1">Actualizado {timeAgo(cv.updatedAt)}</p>
+                        </div>
+                        <button
+                          type="button"
+                          className="text-xs font-bold text-[#294266] hover:text-blue-800 transition-colors whitespace-nowrap"
+                          onClick={() => navigate(routes.cvBuilder)}
                         >
-                          <td className="py-4 px-6">
-                            <p className="text-sm font-semibold text-[#1e3456]">{j.role}</p>
-                            <p className="text-[11px] text-slate-400 mt-1">{j.published}</p>
-                          </td>
-                          <td className="py-4 px-6">
-                            {j.status === "Activo" ? (
-                              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Activo
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400">
-                                <span className="w-1.5 h-1.5 rounded-full bg-slate-300" /> Pausado
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-4 px-6 text-sm text-slate-600">
-                            <span className={j.status === "Activo" ? "font-bold text-[#1e3456]" : "font-bold text-slate-400"}>
-                              {String(j.applicants).padStart(2, "0")}
-                            </span>{" "}
-                            aplicantes
-                          </td>
-                          <td className="py-4 px-6 text-right">
-                            <button type="button" className="text-xs font-bold text-[#294266] hover:text-blue-800 transition-colors">
-                              {j.action}
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                          Ver
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </section>
           </div>
