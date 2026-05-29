@@ -18,11 +18,12 @@ import { email, optionalString, password, requiredString } from "../shared/valid
 
 export function createAuthRouter(ctx: AppContext) {
   const router = Router();
+  const companyProfiles = new CompanyProfileRepository(ctx.db);
   const service = new AuthService(
     ctx.env,
     new UserRepository(ctx.db),
     new TalentProfileRepository(ctx.db),
-    new CompanyProfileRepository(ctx.db),
+    companyProfiles,
   );
 
   async function handleSupabaseLogin(req: any, roleRawFallback: string) {
@@ -79,6 +80,12 @@ export function createAuthRouter(ctx: AppContext) {
       const userEmail = email(body.email, "email");
       const userPassword = password(body.password, "password");
       const displayName = optionalString(body.companyName, "companyName") || userEmail.split("@")[0];
+      const companySize = optionalString(body.companySize, "companySize");
+      const acceptedTerms = body.acceptedTerms === true;
+      const acceptedPrivacy = body.acceptedPrivacy === true;
+      if (!acceptedTerms || !acceptedPrivacy) {
+        throw Errors.badRequest("Debes aceptar los Términos y la Política de Privacidad.");
+      }
       const now = new Date().toISOString();
       const out = await service.register({
         role: "empresa",
@@ -88,6 +95,7 @@ export function createAuthRouter(ctx: AppContext) {
         acceptedTermsAt: now,
         acceptedPrivacyAt: now,
       });
+      await companyProfiles.upsert(Number(out.user.id), { companyName: displayName, companySize });
       return res.status(201).json(out);
     } catch (e) {
       return next(e);

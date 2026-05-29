@@ -19,44 +19,93 @@ import { Button, Input, PasswordField } from "@/shared/ui";
  * En el mock actual, el login persiste sesión local y redirige al dashboard.
  */
 export function LoginCompanyPage() {
-  const loginCompany = useCompanyLogin();
+  const { loginWithPassword, loginWithEmail, isLoading, error, clearError } = useCompanyLogin();
 
-  const [companyName, setCompanyName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [oauthError, setOauthError] = useState<string | null>(null);
 
+  const normalizeSupabaseUrl = (raw: string) => {
+    const v = raw.trim();
+    if (!v) return "";
+    try {
+      const u = new URL(v);
+      return `${u.protocol}//${u.host}`;
+    } catch {
+      return v.replace(/\/rest\/v1(\/.*)?$/i, "").replace(/\/+$/g, "");
+    }
+  };
+
+  const [oauthConfigOpen, setOauthConfigOpen] = useState(false);
+  const [supabaseUrl, setSupabaseUrl] = useState(() => {
+    const env = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+    if (env) return env;
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem("firststep.supabase.url") ?? "";
+  });
+  const [supabaseAnonKey, setSupabaseAnonKey] = useState(() => {
+    const env = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+    if (env) return env;
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem("firststep.supabase.anonKey") ?? "";
+  });
+  const normalizedSupabaseUrl = useMemo(() => normalizeSupabaseUrl(supabaseUrl), [supabaseUrl]);
+  const supabaseConfigured = Boolean(normalizedSupabaseUrl && supabaseAnonKey.trim());
+
   useEffect(() => {
     const url = new URL(window.location.href);
     const code = url.searchParams.get("code");
-    if (!code) return;
+    const searchErrorRaw = url.searchParams.get("error_description") ?? url.searchParams.get("error") ?? null;
+    const searchErrorCode = url.searchParams.get("error_code");
+    const searchError = searchErrorRaw ? decodeURIComponent(searchErrorRaw) : null;
+
+    const hashParams = new URLSearchParams(window.location.hash.startsWith("#") ? window.location.hash.slice(1) : "");
+    const hashAccessToken = hashParams.get("access_token");
+    const hashRefreshToken = hashParams.get("refresh_token");
+    const hashErrorRaw = hashParams.get("error_description") ?? hashParams.get("error") ?? null;
+    const hashError = hashErrorRaw ? decodeURIComponent(hashErrorRaw) : null;
+
+    const urlError = searchError ?? hashError;
+    if (!code && !hashAccessToken && !urlError) return;
 
     let alive = true;
 
     (async () => {
       try {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-        const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-        if (!supabaseUrl || !supabaseAnonKey) {
-          throw new Error("Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY.");
+        if (!normalizedSupabaseUrl || !supabaseAnonKey.trim()) {
+          throw new Error("OAuth no está configurado (Supabase URL / Anon Key).");
         }
 
-        const supabase = createClient(supabaseUrl, supabaseAnonKey);
-        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-        if (exchangeError) throw exchangeError;
+        if (urlError) {
+          if (searchErrorCode === "bad_oauth_state") {
+            throw new Error(
+              "OAuth state no encontrado o expiró. Vuelve a intentarlo sin recargar la página y usando la misma URL (por ejemplo, siempre http://localhost:5173).",
+            );
+          }
+          throw new Error(urlError);
+        }
+
+        const supabase = createClient(normalizedSupabaseUrl, supabaseAnonKey.trim());
+        if (code) {
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeError) throw exchangeError;
+        } else if (hashAccessToken && hashRefreshToken) {
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: hashAccessToken,
+            refresh_token: hashRefreshToken,
+          });
+          if (sessionError) throw sessionError;
+        } else {
+          throw new Error("Respuesta OAuth incompleta.");
+        }
 
         const { data } = await supabase.auth.getSession();
         const session = data.session;
         const accessToken = session?.access_token;
         const userEmail = session?.user?.email ?? null;
-        const display =
-          (session?.user?.user_metadata as any)?.company_name ??
-          (session?.user?.user_metadata as any)?.full_name ??
-          (userEmail ? userEmail.split("@")[0] : null) ??
-          "Empresa";
 
         if (accessToken) {
-          const res = await fetch("/api/auth/login/google", {
+          const res = await fetch("/api/auth/login/oauth", {
             method: "POST",
             headers: {
               Authorization: `Bearer ${accessToken}`,
@@ -66,17 +115,25 @@ export function LoginCompanyPage() {
           });
 
           if (!res.ok) {
-            const text = await res.text().catch(() => "");
-            throw new Error(text || `Login Google falló (${res.status}).`);
+            let message = `Login OAuth falló (${res.status}).`;
+            try {
+              const data = (await res.json()) as any;
+              if (typeof data?.error?.message === "string" && data.error.message) message = data.error.message;
+            } catch { }
+            throw new Error(message);
           }
 
-          const out = (await res.json()) as { accessToken?: string };
+          const out = (await res.json()) as { accessToken?: string; user?: { role?: string } };
+          if (out?.user?.role !== "empresa") {
+            localStorage.removeItem("firststep.api.accessToken");
+            throw new Error("Esta cuenta no es de empresa. Inicia sesión en /login o usa un correo distinto para empresa.");
+          }
           if (out.accessToken) localStorage.setItem("firststep.api.accessToken", out.accessToken);
         }
 
         if (!alive) return;
         if (!userEmail) throw new Error("No se pudo obtener el email del usuario.");
-        loginCompany({ companyName: String(display), email: userEmail });
+        await loginWithEmail({ email: userEmail });
       } catch (e) {
         if (!alive) return;
         const msg = e instanceof Error ? e.message : String(e);
@@ -91,14 +148,84 @@ export function LoginCompanyPage() {
     return () => {
       alive = false;
     };
-  }, [loginCompany]);
+  }, [loginWithEmail, normalizedSupabaseUrl, supabaseAnonKey]);
 
   const isSubmitDisabled = useMemo(() => {
-    return companyName.trim().length === 0 || email.trim().length === 0 || password.trim().length === 0;
-  }, [companyName, email, password]);
+    return email.trim().length === 0 || password.trim().length === 0 || isLoading;
+  }, [email, isLoading, password]);
 
   return (
     <div className="min-h-screen bg-[#0b1220] text-white flex items-center justify-center p-4 md:p-8">
+      {oauthConfigOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button type="button" className="absolute inset-0 bg-slate-950/40" onClick={() => setOauthConfigOpen(false)} />
+          <div className="relative w-full max-w-lg bg-white rounded-2xl border border-slate-200 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.35)] overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <p className="text-sm font-bold text-[#111827]">Configurar OAuth (Supabase)</p>
+              <button
+                type="button"
+                onClick={() => setOauthConfigOpen(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors p-1"
+                aria-label="Cerrar"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" x2="6" y1="6" y2="18" />
+                  <line x1="6" x2="18" y1="6" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-4">
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-2">
+                  Supabase URL
+                </label>
+                <Input
+                  value={supabaseUrl}
+                  onChange={(e) => setSupabaseUrl(e.target.value)}
+                  placeholder="https://xxxxx.supabase.co"
+                  className="bg-[#f3f5f8] rounded-xl focus:ring-[#0b1220]/20 placeholder:text-slate-400 text-sm border border-transparent focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-2">
+                  Supabase Anon Key
+                </label>
+                <Input
+                  type="password"
+                  value={supabaseAnonKey}
+                  onChange={(e) => setSupabaseAnonKey(e.target.value)}
+                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  className="bg-[#f3f5f8] rounded-xl focus:ring-[#0b1220]/20 placeholder:text-slate-400 text-sm border border-transparent focus:border-transparent"
+                />
+              </div>
+              <div className="text-[12px] text-slate-500 leading-relaxed">
+                Configura en Supabase el redirect URL
+                <span className="font-mono"> {`${window.location.origin}${routes.companyLogin}`}</span>.
+              </div>
+            </div>
+            <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/40 flex items-center justify-end gap-2">
+              <Button type="button" variant="secondary" size="sm" onClick={() => setOauthConfigOpen(false)}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  const url = normalizeSupabaseUrl(supabaseUrl);
+                  const key = supabaseAnonKey.trim();
+                  localStorage.setItem("firststep.supabase.url", url);
+                  localStorage.setItem("firststep.supabase.anonKey", key);
+                  setSupabaseUrl(url);
+                  setSupabaseAnonKey(key);
+                  setOauthConfigOpen(false);
+                }}
+              >
+                Guardar
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="w-full max-w-[1100px] grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-6 rounded-[2rem] bg-white/5 border border-white/10 p-10 md:p-12 relative overflow-hidden">
           <div className="absolute -top-24 -right-24 w-72 h-72 bg-[#5d85c4]/20 rounded-full blur-3xl" />
@@ -140,15 +267,15 @@ export function LoginCompanyPage() {
                 type="button"
                 className="w-full flex items-center justify-center gap-2 border border-slate-200 rounded-xl py-3 font-medium text-slate-700 hover:bg-slate-50 transition-colors text-sm"
                 onClick={async () => {
+                  localStorage.setItem("firststep.oauth.returnTo", routes.companyLogin);
                   setOauthError(null);
                   try {
-                    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-                    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-                    if (!supabaseUrl || !supabaseAnonKey) {
-                      throw new Error("Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY.");
+                    if (!supabaseConfigured) {
+                      setOauthConfigOpen(true);
+                      return;
                     }
 
-                    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+                    const supabase = createClient(normalizedSupabaseUrl, supabaseAnonKey.trim());
                     const { error } = await supabase.auth.signInWithOAuth({
                       provider: "google",
                       options: { redirectTo: `${window.location.origin}${routes.companyLogin}` },
@@ -188,26 +315,21 @@ export function LoginCompanyPage() {
               </div>
             ) : null}
 
+            {error ? (
+              <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {error}
+              </div>
+            ) : null}
+
             <form
               className="mt-8 space-y-5"
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
-                loginCompany({ companyName, email });
+                setOauthError(null);
+                clearError();
+                await loginWithPassword({ email: email.trim(), password });
               }}
             >
-              <div>
-                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-2">
-                  Nombre de la empresa
-                </label>
-                <Input
-                  type="text"
-                  placeholder="ej. Acme Tech"
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  className="bg-[#f3f5f8] rounded-xl focus:ring-[#0b1220]/20 placeholder:text-slate-400 text-sm border border-transparent focus:border-transparent"
-                />
-              </div>
-
               <div>
                 <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-2">
                   Correo
@@ -234,7 +356,7 @@ export function LoginCompanyPage() {
               </div>
 
               <Button type="submit" disabled={isSubmitDisabled} className="w-full rounded-xl py-3.5">
-                Iniciar sesión
+                {isLoading ? "Ingresando..." : "Iniciar sesión"}
               </Button>
             </form>
 

@@ -41,6 +41,14 @@ export function DashboardUserPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [data, setData] = useState<any>(null);
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [jobsError, setJobsError] = useState<string | null>(null);
+  const [jobsLoading, setJobsLoading] = useState(false);
+
+  const [applyModal, setApplyModal] = useState<null | { jobId: number; title: string; companyName: string | null }>(null);
+  const [coverLetter, setCoverLetter] = useState("");
+  const [applyLoading, setApplyLoading] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -51,7 +59,7 @@ export function DashboardUserPage() {
       return;
     }
 
-    (async () => {
+    const loadDashboard = async () => {
       try {
         setIsLoading(true);
         setLoadError(null);
@@ -75,6 +83,36 @@ export function DashboardUserPage() {
       } finally {
         if (alive) setIsLoading(false);
       }
+    };
+
+    const loadJobs = async () => {
+      try {
+        setJobsLoading(true);
+        setJobsError(null);
+        const res = await fetch("/api/talent/jobs", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) {
+          let message = `No se pudieron cargar las ofertas (${res.status}).`;
+          try {
+            const out = (await res.json()) as any;
+            if (typeof out?.error?.message === "string" && out.error.message) message = out.error.message;
+          } catch { }
+          throw new Error(message);
+        }
+        const out = (await res.json()) as { jobs: any[] };
+        if (!alive) return;
+        setJobs(out.jobs ?? []);
+      } catch (e) {
+        if (!alive) return;
+        setJobsError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (alive) setJobsLoading(false);
+      }
+    };
+
+    (async () => {
+      await Promise.all([loadDashboard(), loadJobs()]);
     })();
 
     return () => {
@@ -99,6 +137,19 @@ export function DashboardUserPage() {
 
   const recentCvs = (data?.recent?.cvs ?? []) as Array<{ id: string; title: string; updatedAt: string }>;
   const recentSessions = (data?.recent?.sessions ?? []) as Array<{ id: string; kind: string; title: string; model: string; updatedAt: string }>;
+  const jobRows = (jobs ?? []) as Array<{
+    id: number;
+    title: string;
+    description: string;
+    location: string | null;
+    employmentType: string;
+    seniority: string;
+    salaryMin: number | null;
+    salaryMax: number | null;
+    companyName: string | null;
+    createdAt: string;
+    hasApplied: boolean;
+  }>;
 
   const timeAgo = (iso: string) => {
     const t = new Date(iso).getTime();
@@ -148,6 +199,123 @@ export function DashboardUserPage() {
 
   return (
     <div className="min-h-screen flex flex-col text-slate-800 bg-[#f8fafc]">
+      {applyModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-slate-950/40"
+            onClick={() => {
+              setApplyModal(null);
+              setCoverLetter("");
+              setApplyError(null);
+            }}
+          />
+          <div className="relative w-full max-w-lg bg-white rounded-2xl border border-slate-200 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.35)] overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-[#111827] truncate">Postular</p>
+                <p className="text-[12px] text-slate-500 truncate">
+                  {applyModal.title}
+                  {applyModal.companyName ? ` · ${applyModal.companyName}` : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setApplyModal(null);
+                  setCoverLetter("");
+                  setApplyError(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 transition-colors p-1"
+                aria-label="Cerrar"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" x2="6" y1="6" y2="18" />
+                  <line x1="6" x2="18" y1="6" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              {applyError ? (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {applyError}
+                </div>
+              ) : null}
+              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
+                Mensaje (opcional)
+              </label>
+              <textarea
+                value={coverLetter}
+                onChange={(e) => setCoverLetter(e.target.value)}
+                disabled={applyLoading}
+                className="w-full min-h-28 bg-[#f3f5f8] rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-[#294266]/20 transition-all text-sm resize-y border border-transparent"
+                placeholder="Cuéntales por qué eres buen candidato."
+              />
+            </div>
+            <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/40 flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={applyLoading}
+                onClick={() => {
+                  setApplyModal(null);
+                  setCoverLetter("");
+                  setApplyError(null);
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={applyLoading}
+                onClick={async () => {
+                  const token = localStorage.getItem("firststep.api.accessToken") ?? "";
+                  if (!token) {
+                    setApplyError("No hay sesión válida. Vuelve a iniciar sesión.");
+                    return;
+                  }
+                  setApplyLoading(true);
+                  setApplyError(null);
+                  try {
+                    const res = await fetch(`/api/talent/jobs/${applyModal.jobId}/apply`, {
+                      method: "POST",
+                      headers: {
+                        Authorization: `Bearer ${token}`,
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({ coverLetter: coverLetter.trim() ? coverLetter.trim() : null }),
+                    });
+                    if (!res.ok) {
+                      let message = `No se pudo postular (${res.status}).`;
+                      try {
+                        const out = (await res.json()) as any;
+                        if (typeof out?.error?.message === "string" && out.error.message) message = out.error.message;
+                      } catch { }
+                      throw new Error(message);
+                    }
+                    const jobsRes = await fetch("/api/talent/jobs", { headers: { Authorization: `Bearer ${token}` } });
+                    if (jobsRes.ok) {
+                      const out = (await jobsRes.json()) as any;
+                      setJobs(out.jobs ?? []);
+                    }
+                    setApplyModal(null);
+                    setCoverLetter("");
+                  } catch (e) {
+                    setApplyError(e instanceof Error ? e.message : String(e));
+                  } finally {
+                    setApplyLoading(false);
+                  }
+                }}
+              >
+                {applyLoading ? "Enviando..." : "Postular"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <nav className="bg-white border-b border-slate-200 sticky top-0 z-50">
         <div className="max-w-[1400px] mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-10">
@@ -430,6 +598,66 @@ export function DashboardUserPage() {
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
           <div className="xl:col-span-2 space-y-10">
+            <section>
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-[#1e3456] tracking-tight">
+                  Ofertas disponibles
+                </h2>
+              </div>
+
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                {jobsLoading ? (
+                  <div className="p-6">
+                    <p className="text-sm text-slate-500">Cargando ofertas...</p>
+                  </div>
+                ) : jobsError ? (
+                  <div className="p-6">
+                    <p className="text-sm text-red-700">{jobsError}</p>
+                  </div>
+                ) : jobRows.length === 0 ? (
+                  <div className="p-6">
+                    <p className="text-sm text-slate-500">Aún no hay ofertas activas.</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {jobRows.slice(0, 6).map((j) => (
+                      <div key={j.id} className="px-6 py-4 flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-[#1e3456] truncate">{j.title}</p>
+                          <p className="text-[11px] text-slate-400 mt-1">
+                            {(j.companyName ?? "Empresa")}{j.location ? ` · ${j.location}` : ""} · {j.seniority}
+                          </p>
+                          <p className="text-sm text-slate-600 mt-2 line-clamp-2">
+                            {j.description}
+                          </p>
+                        </div>
+                        <div className="shrink-0 flex items-center gap-2">
+                          {j.hasApplied ? (
+                            <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-200">
+                              Postulado
+                            </span>
+                          ) : null}
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={j.hasApplied ? "secondary" : "primary"}
+                            disabled={j.hasApplied}
+                            onClick={() => {
+                              setApplyError(null);
+                              setCoverLetter("");
+                              setApplyModal({ jobId: j.id, title: j.title, companyName: j.companyName });
+                            }}
+                          >
+                            {j.hasApplied ? "Enviado" : "Postular"}
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
+
             <section>
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-[#1e3456] tracking-tight">

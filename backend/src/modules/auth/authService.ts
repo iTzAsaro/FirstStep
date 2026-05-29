@@ -100,6 +100,12 @@ export class AuthService {
       user = await this.users.findBySupabaseUserId(supabaseUserId);
     }
 
+    if (user && user.role !== params.role) {
+      throw Errors.conflict(
+        `Este correo ya está registrado como '${user.role}'. Inicia sesión con ese rol o usa un correo distinto.`,
+      );
+    }
+
     if (!user) {
       const passwordHash = await bcrypt.hash(crypto.randomUUID(), this.env.bcryptRounds);
       user = await this.users.createWithSupabaseUserId({

@@ -37,8 +37,15 @@ export function AppProviders({ children }: { children: ReactNode }) {
       url.searchParams.has("error_code") ||
       (url.hash ? url.hash.includes("access_token=") || url.hash.includes("error=") || url.hash.includes("error_description=") : false);
 
-    if (hasOAuthSignal && url.pathname !== routes.login) {
-      window.location.replace(`${routes.login}${window.location.search}${window.location.hash}`);
+    if (hasOAuthSignal) {
+      const key = "firststep.oauth.returnTo";
+      const stored = localStorage.getItem(key);
+      const allowed = stored === routes.login || stored === routes.companySignUp ? stored : routes.login;
+      if (stored) localStorage.removeItem(key);
+
+      if (url.pathname !== allowed) {
+        window.location.replace(`${allowed}${window.location.search}${window.location.hash}`);
+      }
     }
   }, []);
 

@@ -5,13 +5,15 @@
 // ║ Creado:      20-05-2026                                              ║
 // ╚══════════════════════════════════════════════════════════════════════╝
 
-import { useMemo, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
+import { useEffect, useMemo, useState } from "react";
 
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
+import { useSession } from "@/entities/session";
 import { useCompanySignUp } from "@/features/auth/login-company/model/useCompanySignUp";
 import { routes } from "@/shared/config/routes";
-import { Button, Checkbox, Input, Select } from "@/shared/ui";
+import { Button, Checkbox, Input, PasswordField, Select } from "@/shared/ui";
 
 const COMPANY_SIZES = [
   { value: "1-10", label: "1 - 10 empleados" },
@@ -26,26 +28,384 @@ const COMPANY_SIZES = [
  * En el mock actual, crea una sesión local de empresa y redirige al dashboard.
  */
 export function SignUpCompanyPage() {
-  const signUp = useCompanySignUp();
+  const session = useSession();
+  const navigate = useNavigate();
+  const { signUp, isLoading, error, clearError } = useCompanySignUp();
+
+  const normalizeSupabaseUrl = (raw: string) => {
+    const v = raw.trim();
+    if (!v) return "";
+    try {
+      const u = new URL(v);
+      return `${u.protocol}//${u.host}`;
+    } catch {
+      return v.replace(/\/rest\/v1(\/.*)?$/i, "").replace(/\/+$/g, "");
+    }
+  };
 
   const [companyName, setCompanyName] = useState("");
   const [email, setEmail] = useState("");
   const [companySize, setCompanySize] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [legalOpen, setLegalOpen] = useState<null | "terms" | "privacy">(null);
+
+  const [oauthError, setOauthError] = useState<string | null>(null);
+  const [oauthLoading, setOauthLoading] = useState(false);
+  const [oauthConfigOpen, setOauthConfigOpen] = useState(false);
+  const [supabaseUrl, setSupabaseUrl] = useState(() => {
+    const env = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+    if (env) return env;
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem("firststep.supabase.url") ?? "";
+  });
+  const [supabaseAnonKey, setSupabaseAnonKey] = useState(() => {
+    const env = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+    if (env) return env;
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem("firststep.supabase.anonKey") ?? "";
+  });
+  const normalizedSupabaseUrl = useMemo(() => normalizeSupabaseUrl(supabaseUrl), [supabaseUrl]);
+  const supabaseConfigured = Boolean(normalizedSupabaseUrl && supabaseAnonKey.trim());
+
+  const emailOk = useMemo(() => {
+    const v = email.trim();
+    if (!v) return false;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+  }, [email]);
+
+  const companyNameOk = useMemo(() => {
+    const v = companyName.trim();
+    return v.length >= 2;
+  }, [companyName]);
+
+  const passwordRules = useMemo(() => {
+    return {
+      len: password.length >= 8,
+      lower: /[a-z]/.test(password),
+      upper: /[A-Z]/.test(password),
+      number: /\d/.test(password),
+    };
+  }, [password]);
+
+  const passwordOk = passwordRules.len && passwordRules.lower && passwordRules.upper && passwordRules.number;
+  const confirmOk = confirmPassword.length > 0 && confirmPassword === password;
+
+  const companyNameError = useMemo(() => {
+    if (!submitAttempted && companyName.trim().length === 0) return null;
+    if (!companyNameOk) return "Ingresa el nombre de la empresa.";
+    return null;
+  }, [companyName, companyNameOk, submitAttempted]);
+
+  const emailError = useMemo(() => {
+    if (!submitAttempted && email.trim().length === 0) return null;
+    if (!emailOk) return "Ingresa un correo válido.";
+    return null;
+  }, [email, emailOk, submitAttempted]);
+
+  const companySizeError = useMemo(() => {
+    if (!submitAttempted && companySize.trim().length === 0) return null;
+    if (!companySize.trim()) return "Selecciona el tamaño de la empresa.";
+    return null;
+  }, [companySize, submitAttempted]);
+
+  const passwordError = useMemo(() => {
+    if (!submitAttempted && password.length === 0) return null;
+    if (!passwordOk) return "Tu contraseña debe cumplir los requisitos.";
+    return null;
+  }, [password.length, passwordOk, submitAttempted]);
+
+  const confirmError = useMemo(() => {
+    if (!submitAttempted && confirmPassword.length === 0) return null;
+    if (!confirmOk) return "Las contraseñas no coinciden.";
+    return null;
+  }, [confirmOk, confirmPassword.length, submitAttempted]);
+
+  const termsError = useMemo(() => {
+    if (!submitAttempted) return null;
+    if (!acceptedTerms) return "Debes aceptar los Términos y la Política para continuar.";
+    return null;
+  }, [acceptedTerms, submitAttempted]);
 
   const isSubmitDisabled = useMemo(() => {
-    return (
-      companyName.trim().length === 0 ||
-      email.trim().length === 0 ||
-      companySize.trim().length === 0 ||
-      password.trim().length < 8 ||
-      !acceptedTerms
-    );
-  }, [acceptedTerms, companyName, companySize, email, password]);
+    const valid = companyNameOk && emailOk && companySize.trim().length > 0 && passwordOk && confirmOk && acceptedTerms;
+    return !valid || isLoading;
+  }, [acceptedTerms, companyNameOk, companySize, confirmOk, emailOk, isLoading, passwordOk]);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get("code");
+    const searchErrorRaw = url.searchParams.get("error_description") ?? url.searchParams.get("error") ?? null;
+    const searchErrorCode = url.searchParams.get("error_code");
+    const searchError = searchErrorRaw ? decodeURIComponent(searchErrorRaw) : null;
+
+    const hashParams = new URLSearchParams(window.location.hash.startsWith("#") ? window.location.hash.slice(1) : "");
+    const hashAccessToken = hashParams.get("access_token");
+    const hashRefreshToken = hashParams.get("refresh_token");
+    const hashErrorRaw = hashParams.get("error_description") ?? hashParams.get("error") ?? null;
+    const hashError = hashErrorRaw ? decodeURIComponent(hashErrorRaw) : null;
+
+    const urlError = searchError ?? hashError;
+    if (!code && !hashAccessToken && !urlError) return;
+
+    let alive = true;
+
+    (async () => {
+      setOauthLoading(true);
+      setOauthError(null);
+      try {
+        if (!normalizedSupabaseUrl || !supabaseAnonKey.trim()) {
+          throw new Error("OAuth no está configurado (Supabase URL / Anon Key).");
+        }
+
+        if (urlError) {
+          if (searchErrorCode === "bad_oauth_state") {
+            throw new Error(
+              "OAuth state no encontrado o expiró. Vuelve a intentarlo sin recargar la página y usando la misma URL (por ejemplo, siempre http://localhost:5173).",
+            );
+          }
+          throw new Error(urlError);
+        }
+
+        const supabase = createClient(normalizedSupabaseUrl, supabaseAnonKey.trim());
+        if (code) {
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeError) throw exchangeError;
+        } else if (hashAccessToken && hashRefreshToken) {
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: hashAccessToken,
+            refresh_token: hashRefreshToken,
+          });
+          if (sessionError) throw sessionError;
+        } else {
+          throw new Error("Respuesta OAuth incompleta.");
+        }
+
+        const { data } = await supabase.auth.getSession();
+        const sbSession = data.session;
+        const supabaseAccessToken = sbSession?.access_token;
+        const userEmail = sbSession?.user?.email ?? null;
+        if (!supabaseAccessToken || !userEmail) throw new Error("No se pudo obtener el access token o email de Supabase.");
+
+        const res = await fetch("/api/auth/login/oauth", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${supabaseAccessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ role: "empresa" }),
+        });
+
+        if (!res.ok) {
+          let message = `Login OAuth falló (${res.status}).`;
+          try {
+            const data = (await res.json()) as any;
+            if (typeof data?.error?.message === "string" && data.error.message) {
+              message = data.error.message;
+            }
+          } catch { }
+          throw new Error(message);
+        }
+
+        const out = (await res.json()) as { accessToken?: string };
+        const backendToken = out.accessToken ?? "";
+        if (!backendToken) throw new Error("El backend no devolvió accessToken.");
+        localStorage.setItem("firststep.api.accessToken", backendToken);
+
+        const updateBody: Record<string, string> = {};
+        if (companyName.trim()) updateBody.companyName = companyName.trim();
+        if (companySize.trim()) updateBody.companySize = companySize.trim();
+        if (Object.keys(updateBody).length) {
+          await fetch("/api/company/profile", {
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${backendToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(updateBody),
+          }).catch(() => null);
+        }
+
+        const profRes = await fetch("/api/company/profile", {
+          headers: { Authorization: `Bearer ${backendToken}` },
+        });
+        const profOut = profRes.ok ? ((await profRes.json()) as any) : null;
+        const companyNameFromProfile =
+          (typeof profOut?.profile?.companyName === "string" && profOut.profile.companyName.trim()) ||
+          companyName.trim() ||
+          userEmail.split("@")[0];
+
+        if (!alive) return;
+        session.loginCompany({ companyName: companyNameFromProfile, email: userEmail });
+        navigate(routes.companyDashboard);
+      } catch (e) {
+        if (!alive) return;
+        const msg = e instanceof Error ? e.message : String(e);
+        setOauthError(msg);
+      } finally {
+        if (alive) {
+          setOauthLoading(false);
+          window.history.replaceState({}, document.title, routes.companySignUp);
+        }
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [companyName, companySize, navigate, normalizedSupabaseUrl, session, supabaseAnonKey]);
+
+  const startGoogleOAuth = async () => {
+    setOauthError(null);
+    setSubmitAttempted(true);
+    if (!acceptedTerms) {
+      setOauthError("Debes aceptar los Términos y la Política para continuar.");
+      return;
+    }
+    if (!supabaseConfigured) {
+      setOauthConfigOpen(true);
+      return;
+    }
+    try {
+      setOauthLoading(true);
+      localStorage.setItem("firststep.oauth.returnTo", routes.companySignUp);
+      const supabase = createClient(normalizedSupabaseUrl, supabaseAnonKey.trim());
+      const redirectTo = `${window.location.origin}${routes.companySignUp}`;
+      const { error: oauthStartError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo },
+      });
+      if (oauthStartError) throw oauthStartError;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setOauthError(msg);
+      setOauthLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-white">
+      {oauthConfigOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button type="button" className="absolute inset-0 bg-slate-950/40" onClick={() => setOauthConfigOpen(false)} />
+          <div className="relative w-full max-w-lg bg-white rounded-2xl border border-slate-200 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.35)] overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <p className="text-sm font-bold text-[#111827]">Configurar OAuth (Supabase)</p>
+              <button
+                type="button"
+                onClick={() => setOauthConfigOpen(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors p-1"
+                aria-label="Cerrar"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" x2="6" y1="6" y2="18" />
+                  <line x1="6" x2="18" y1="6" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-4">
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-2">
+                  Supabase URL
+                </label>
+                <Input
+                  value={supabaseUrl}
+                  onChange={(e) => setSupabaseUrl(e.target.value)}
+                  placeholder="https://xxxxx.supabase.co"
+                  className="bg-[#f3f5f8] rounded-xl focus:ring-[#1e3456]/20 placeholder:text-slate-400 text-sm border border-transparent focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-2">
+                  Supabase Anon Key
+                </label>
+                <Input
+                  type="password"
+                  value={supabaseAnonKey}
+                  onChange={(e) => setSupabaseAnonKey(e.target.value)}
+                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  className="bg-[#f3f5f8] rounded-xl focus:ring-[#1e3456]/20 placeholder:text-slate-400 text-sm border border-transparent focus:border-transparent"
+                />
+              </div>
+              <div className="text-[12px] text-slate-500 leading-relaxed">
+                Configura en Supabase el redirect URL
+                <span className="font-mono"> {`${window.location.origin}${routes.companySignUp}`}</span>.
+              </div>
+            </div>
+            <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/40 flex items-center justify-end gap-2">
+              <Button type="button" variant="secondary" size="sm" onClick={() => setOauthConfigOpen(false)}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  const url = normalizeSupabaseUrl(supabaseUrl);
+                  const key = supabaseAnonKey.trim();
+                  localStorage.setItem("firststep.supabase.url", url);
+                  localStorage.setItem("firststep.supabase.anonKey", key);
+                  setSupabaseUrl(url);
+                  setSupabaseAnonKey(key);
+                  setOauthConfigOpen(false);
+                }}
+              >
+                Guardar
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {legalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button type="button" className="absolute inset-0 bg-slate-950/40" onClick={() => setLegalOpen(null)} />
+          <div className="relative w-full max-w-lg bg-white rounded-2xl border border-slate-200 shadow-[0_20px_60px_-20px_rgba(0,0,0,0.35)] overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <p className="text-sm font-bold text-[#111827]">
+                {legalOpen === "terms" ? "Términos de Servicio" : "Política de Privacidad"}
+              </p>
+              <button
+                type="button"
+                onClick={() => setLegalOpen(null)}
+                className="text-slate-400 hover:text-slate-600 transition-colors p-1"
+                aria-label="Cerrar"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" x2="6" y1="6" y2="18" />
+                  <line x1="6" x2="18" y1="6" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <div className="px-5 py-4 text-sm text-slate-600 leading-relaxed">
+              {legalOpen === "terms" ? (
+                <div className="space-y-3">
+                  <p>Al crear una cuenta aceptas usar la plataforma de forma responsable y conforme a la ley.</p>
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li>No publiques información falsa o engañosa.</li>
+                    <li>Mantén tus credenciales seguras.</li>
+                    <li>Podemos suspender cuentas por abuso o uso indebido.</li>
+                  </ul>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p>Usamos tus datos para crear tu cuenta, mejorar tu experiencia y permitirte acceder a funcionalidades.</p>
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li>Guardamos tu email para autenticación.</li>
+                    <li>Puedes solicitar eliminación de tu cuenta.</li>
+                    <li>No compartimos tu información sensible sin tu consentimiento.</li>
+                  </ul>
+                </div>
+              )}
+            </div>
+            <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/40 flex justify-end">
+              <Button type="button" variant="secondary" size="sm" onClick={() => setLegalOpen(null)}>
+                Entendido
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="w-full md:w-1/2 bg-[#1e3456] flex flex-col justify-between p-8 md:p-12 lg:p-16 relative overflow-hidden text-white min-h-[500px] md:min-h-screen">
         <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-blue-400/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
 
@@ -127,6 +487,18 @@ export function SignUpCompanyPage() {
             Completa los detalles para comenzar a contratar a tus próximos talentos destacados.
           </p>
 
+          {oauthError ? (
+            <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {oauthError}
+            </div>
+          ) : null}
+
+          {error ? (
+            <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          ) : null}
+
           <div className="grid grid-cols-2 gap-3 mb-6">
             <button
               type="button"
@@ -140,6 +512,8 @@ export function SignUpCompanyPage() {
             <button
               type="button"
               className="flex items-center justify-center gap-2 border border-slate-200 rounded-lg py-2.5 font-medium text-slate-600 hover:bg-slate-50 transition-colors text-xs"
+              disabled={oauthLoading || isLoading}
+              onClick={startGoogleOAuth}
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24">
                 <path
@@ -159,7 +533,7 @@ export function SignUpCompanyPage() {
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                 />
               </svg>
-              Google
+              {oauthLoading ? "Cargando..." : "Google"}
             </button>
           </div>
 
@@ -173,9 +547,19 @@ export function SignUpCompanyPage() {
 
           <form
             className="space-y-4"
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
-              signUp({ companyName, email });
+              setSubmitAttempted(true);
+              clearError();
+              if (!companyNameOk || !emailOk || !companySize.trim() || !passwordOk || !confirmOk || !acceptedTerms) return;
+              await signUp({
+                companyName: companyName.trim(),
+                companySize,
+                email: email.trim(),
+                password,
+                acceptedTerms: true,
+                acceptedPrivacy: true,
+              });
             }}
           >
             <div>
@@ -187,8 +571,14 @@ export function SignUpCompanyPage() {
                 placeholder="ej. Acme Tech"
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
-                className="bg-[#f8fafc] rounded-lg focus:ring-[#1e3456]/20"
+                aria-invalid={Boolean(companyNameError) || undefined}
+                className={[
+                  "bg-[#f8fafc] rounded-lg focus:ring-[#1e3456]/20",
+                  companyNameError ? "ring-2 ring-red-200" : null,
+                ].join(" ")}
+                disabled={isLoading}
               />
+              {companyNameError ? <p className="mt-2 text-[11px] text-red-700">{companyNameError}</p> : null}
             </div>
 
             <div>
@@ -200,8 +590,14 @@ export function SignUpCompanyPage() {
                 placeholder="nombre@empresa.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="bg-[#f8fafc] rounded-lg focus:ring-[#1e3456]/20"
+                aria-invalid={Boolean(emailError) || undefined}
+                className={[
+                  "bg-[#f8fafc] rounded-lg focus:ring-[#1e3456]/20",
+                  emailError ? "ring-2 ring-red-200" : null,
+                ].join(" ")}
+                disabled={isLoading}
               />
+              {emailError ? <p className="mt-2 text-[11px] text-red-700">{emailError}</p> : null}
             </div>
 
             <div>
@@ -212,7 +608,11 @@ export function SignUpCompanyPage() {
                 <Select
                   value={companySize}
                   onChange={(e) => setCompanySize(e.target.value)}
-                  className="appearance-none pr-10"
+                  className={[
+                    "appearance-none pr-10",
+                    companySizeError ? "ring-2 ring-red-200" : null,
+                  ].join(" ")}
+                  disabled={isLoading}
                 >
                   <option value="" disabled>
                     Selecciona el tamaño
@@ -239,42 +639,71 @@ export function SignUpCompanyPage() {
                   </svg>
                 </div>
               </div>
+              {companySizeError ? <p className="mt-2 text-[11px] text-red-700">{companySizeError}</p> : null}
             </div>
 
             <div>
               <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5">
                 Contraseña
               </label>
-              <Input
-                type="password"
-                placeholder="Mín. 8 caracteres"
+              <PasswordField
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="bg-[#f8fafc] rounded-lg focus:ring-[#1e3456]/20"
+                onChange={(v) => setPassword(v)}
+                placeholder="Mín. 8 caracteres"
+                className={[
+                  "bg-[#f8fafc] rounded-lg focus:ring-[#1e3456]/20",
+                  passwordError ? "ring-2 ring-red-200" : null,
+                ].join(" ")}
+                disabled={isLoading}
               />
+              {passwordError ? <p className="mt-2 text-[11px] text-red-700">{passwordError}</p> : null}
+              <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-slate-500">
+                <div className={passwordRules.len ? "text-emerald-700" : ""}>• 8+ caracteres</div>
+                <div className={passwordRules.upper ? "text-emerald-700" : ""}>• 1 mayúscula</div>
+                <div className={passwordRules.lower ? "text-emerald-700" : ""}>• 1 minúscula</div>
+                <div className={passwordRules.number ? "text-emerald-700" : ""}>• 1 número</div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5">
+                Confirmar Contraseña
+              </label>
+              <PasswordField
+                value={confirmPassword}
+                onChange={(v) => setConfirmPassword(v)}
+                placeholder="Repite tu contraseña"
+                className={[
+                  "bg-[#f8fafc] rounded-lg focus:ring-[#1e3456]/20",
+                  confirmError ? "ring-2 ring-red-200" : null,
+                ].join(" ")}
+                disabled={isLoading}
+              />
+              {confirmError ? <p className="mt-2 text-[11px] text-red-700">{confirmError}</p> : null}
             </div>
 
             <div className="flex items-start gap-2 pt-2 pb-2">
-              <Checkbox checked={acceptedTerms} onChange={(e) => setAcceptedTerms(e.target.checked)} />
+              <Checkbox checked={acceptedTerms} onChange={(e) => setAcceptedTerms(e.target.checked)} disabled={isLoading} />
               <span className="text-xs text-slate-500 leading-tight">
                 Acepto los{" "}
-                <a href="#" className="text-[#1e3456] font-medium hover:underline">
+                <button type="button" className="text-[#1e3456] font-medium hover:underline" onClick={() => setLegalOpen("terms")}>
                   Términos de Servicio
-                </a>{" "}
+                </button>{" "}
                 y la{" "}
-                <a href="#" className="text-[#1e3456] font-medium hover:underline">
+                <button type="button" className="text-[#1e3456] font-medium hover:underline" onClick={() => setLegalOpen("privacy")}>
                   Política de Privacidad
-                </a>
+                </button>
                 .
               </span>
             </div>
+            {termsError ? <p className="mt-1 text-[11px] text-red-700">{termsError}</p> : null}
 
             <Button
               type="submit"
               disabled={isSubmitDisabled}
               className="w-full bg-[#243f65] hover:bg-[#15263d] shadow-md shadow-[#243f65]/20 rounded-lg py-3 text-sm"
             >
-              Crear Cuenta de Empresa
+              {isLoading ? "Creando..." : "Crear Cuenta de Empresa"}
             </Button>
           </form>
 

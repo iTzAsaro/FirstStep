@@ -163,6 +163,7 @@ export function LoginUserPage() {
       return;
     }
     try {
+      localStorage.setItem("firststep.oauth.returnTo", routes.login);
       const supabase = createClient(normalizedSupabaseUrl, supabaseAnonKey.trim());
       const redirectTo = `${window.location.origin}${routes.login}`;
       if (provider === "google") {

@@ -11,6 +11,7 @@
 export type CompanyProfile = {
   userId: number;
   companyName: string | null;
+  companySize: string | null;
   industry: string | null;
   website: string | null;
   description: string | null;

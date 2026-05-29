@@ -15,12 +15,13 @@ type Props = {
   onChange: (value: string) => void;
   placeholder?: string;
   className?: string;
+  disabled?: boolean;
 };
 
 /**
  * Campo de contraseña que permite alternar visibilidad.
  */
-export function PasswordField({ value, onChange, placeholder, className }: Props) {
+export function PasswordField({ value, onChange, placeholder, className, disabled }: Props) {
   const [isVisible, setIsVisible] = useState<boolean>(false);
 
   return (
@@ -30,6 +31,7 @@ export function PasswordField({ value, onChange, placeholder, className }: Props
       onChange={(e: ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
       placeholder={placeholder}
       className={className}
+      disabled={disabled}
       rightSlot={
         <button
           type="button"

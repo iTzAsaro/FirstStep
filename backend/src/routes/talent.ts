@@ -8,11 +8,12 @@
 import { Router } from "express";
 
 import type { AppContext } from "../app";
+import { JobRepository } from "../modules/jobs/jobRepository";
 import { TalentProfileRepository } from "../modules/talent/talentProfileRepository";
 import { authenticate } from "../shared/http/middleware/authenticate";
 import { requireRole } from "../shared/http/middleware/requireRole";
 import { Errors } from "../shared/http/middleware/errorHandler";
-import { optionalString, requiredString } from "../shared/validation/validators";
+import { asNumberId, optionalString, requiredString } from "../shared/validation/validators";
 
 /**
  * Rutas de talento:
@@ -24,6 +25,7 @@ import { optionalString, requiredString } from "../shared/validation/validators"
 export function createTalentRouter(ctx: AppContext) {
   const router = Router();
   const repo = new TalentProfileRepository(ctx.db);
+  const jobs = new JobRepository(ctx.db);
 
   router.use(authenticate(ctx.env), requireRole("talento"));
 
@@ -225,6 +227,29 @@ export function createTalentRouter(ctx: AppContext) {
       });
 
       return res.status(201).json({ profile });
+    } catch (e) {
+      return next(e);
+    }
+  });
+
+  router.get("/jobs", async (req, res, next) => {
+    try {
+      if (!req.auth) throw Errors.unauthorized();
+      const rows = await jobs.listActiveForTalent(req.auth.id);
+      return res.json({ jobs: rows });
+    } catch (e) {
+      return next(e);
+    }
+  });
+
+  router.post("/jobs/:id/apply", async (req, res, next) => {
+    try {
+      if (!req.auth) throw Errors.unauthorized();
+      const jobId = asNumberId(req.params.id, "id");
+      const body = req.body ?? {};
+      const coverLetter = optionalString(body.coverLetter, "coverLetter");
+      const application = await jobs.apply(jobId, req.auth.id, coverLetter);
+      return res.status(201).json({ application });
     } catch (e) {
       return next(e);
     }
