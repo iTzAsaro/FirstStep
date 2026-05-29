@@ -14,6 +14,8 @@ export type CreateUserInput = {
   email: string;
   role: Role;
   passwordHash: string;
+  acceptedTermsAt?: string | null;
+  acceptedPrivacyAt?: string | null;
 };
 
 export type CreateUserWithSupabaseInput = CreateUserInput & {
@@ -33,7 +35,14 @@ export class UserRepository {
    */
   async findByEmail(email: string): Promise<User | null> {
     const row = await this.db.queryOne<any>(
-      `SELECT id, email, role, password_hash as "passwordHash", created_at as "createdAt", updated_at as "updatedAt"
+      `SELECT id,
+              email,
+              role,
+              password_hash as "passwordHash",
+              accepted_terms_at as "acceptedTermsAt",
+              accepted_privacy_at as "acceptedPrivacyAt",
+              created_at as "createdAt",
+              updated_at as "updatedAt"
        FROM users
        WHERE email = :email`,
       { email },
@@ -46,7 +55,14 @@ export class UserRepository {
    */
   async findById(id: number): Promise<User | null> {
     const row = await this.db.queryOne<any>(
-      `SELECT id, email, role, password_hash as "passwordHash", created_at as "createdAt", updated_at as "updatedAt"
+      `SELECT id,
+              email,
+              role,
+              password_hash as "passwordHash",
+              accepted_terms_at as "acceptedTermsAt",
+              accepted_privacy_at as "acceptedPrivacyAt",
+              created_at as "createdAt",
+              updated_at as "updatedAt"
        FROM users
        WHERE id = :id`,
       { id },
@@ -61,6 +77,8 @@ export class UserRepository {
               role,
               password_hash as "passwordHash",
               supabase_user_id as "supabaseUserId",
+              accepted_terms_at as "acceptedTermsAt",
+              accepted_privacy_at as "acceptedPrivacyAt",
               created_at as "createdAt",
               updated_at as "updatedAt"
        FROM users
@@ -85,13 +103,22 @@ export class UserRepository {
    */
   async create(input: CreateUserInput): Promise<User> {
     const row = await this.db.queryOne<any>(
-      `INSERT INTO users (email, role, password_hash)
-       VALUES (:email, :role, :passwordHash)
-       RETURNING id, email, role, password_hash as "passwordHash", created_at as "createdAt", updated_at as "updatedAt"`,
+      `INSERT INTO users (email, role, password_hash, accepted_terms_at, accepted_privacy_at)
+       VALUES (:email, :role, :passwordHash, :acceptedTermsAt, :acceptedPrivacyAt)
+       RETURNING id,
+                 email,
+                 role,
+                 password_hash as "passwordHash",
+                 accepted_terms_at as "acceptedTermsAt",
+                 accepted_privacy_at as "acceptedPrivacyAt",
+                 created_at as "createdAt",
+                 updated_at as "updatedAt"`,
       {
         email: input.email,
         role: input.role,
         passwordHash: input.passwordHash,
+        acceptedTermsAt: input.acceptedTermsAt ?? null,
+        acceptedPrivacyAt: input.acceptedPrivacyAt ?? null,
       },
     );
     return row as User;
@@ -99,13 +126,15 @@ export class UserRepository {
 
   async createWithSupabaseUserId(input: CreateUserWithSupabaseInput): Promise<User> {
     const row = await this.db.queryOne<any>(
-      `INSERT INTO users (email, role, password_hash, supabase_user_id)
-       VALUES (:email, :role, :passwordHash, :supabaseUserId)
+      `INSERT INTO users (email, role, password_hash, supabase_user_id, accepted_terms_at, accepted_privacy_at)
+       VALUES (:email, :role, :passwordHash, :supabaseUserId, :acceptedTermsAt, :acceptedPrivacyAt)
        RETURNING id,
                  email,
                  role,
                  password_hash as "passwordHash",
                  supabase_user_id as "supabaseUserId",
+                 accepted_terms_at as "acceptedTermsAt",
+                 accepted_privacy_at as "acceptedPrivacyAt",
                  created_at as "createdAt",
                  updated_at as "updatedAt"`,
       {
@@ -113,6 +142,8 @@ export class UserRepository {
         role: input.role,
         passwordHash: input.passwordHash,
         supabaseUserId: input.supabaseUserId,
+        acceptedTermsAt: input.acceptedTermsAt ?? null,
+        acceptedPrivacyAt: input.acceptedPrivacyAt ?? null,
       },
     );
     return row as User;

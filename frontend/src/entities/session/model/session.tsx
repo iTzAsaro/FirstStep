@@ -59,13 +59,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       /**
        * Login de Talento (mock).
        */
-      loginTalent: ({ email }) => {
+      loginTalent: ({ email, onboardingCompleted }) => {
         setState({
           isAuthenticated: true,
           role: "talento",
           userName: normalizeNameFromEmail(email),
           companyName: null,
-          onboardingCompleted: false,
+          onboardingCompleted: onboardingCompleted ?? false,
         });
       },
       /**

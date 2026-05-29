@@ -16,6 +16,8 @@ export type User = {
   role: Role;
   passwordHash: string;
   supabaseUserId?: string | null;
+  acceptedTermsAt?: string | null;
+  acceptedPrivacyAt?: string | null;
   createdAt: string;
   updatedAt: string;
 };

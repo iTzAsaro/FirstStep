@@ -25,7 +25,7 @@ export type SessionState = {
  * API expuesta por el contexto de sesión.
  */
 export type SessionApi = SessionState & {
-  loginTalent: (payload: { email: string }) => void;
+  loginTalent: (payload: { email: string; onboardingCompleted?: boolean }) => void;
   loginCompany: (payload: { companyName: string; email: string }) => void;
   completeOnboarding: () => void;
   logout: () => void;

@@ -18,6 +18,8 @@ export type Env = {
   databaseUrl: string;
   dbTestOnStartup: boolean;
   supabaseJwtSecret: string | null;
+  supabaseJwksUrl: string | null;
+  supabaseJwksBase64: string | null;
 };
 
 /**
@@ -135,6 +137,8 @@ export function loadEnv(): Env {
   const databaseUrl = readRequired("DATABASE_URL");
   const dbTestOnStartup = readBool("DB_TEST_ON_STARTUP", nodeEnv === "development");
   const supabaseJwtSecret = readOptional("SUPABASE_JWT_SECRET");
+  const supabaseJwksUrl = readOptional("SUPABASE_JWKS_URL");
+  const supabaseJwksBase64 = readOptional("SUPABASE_JWKS_BASE64");
 
   return {
     port,
@@ -146,5 +150,7 @@ export function loadEnv(): Env {
     databaseUrl,
     dbTestOnStartup,
     supabaseJwtSecret,
+    supabaseJwksUrl,
+    supabaseJwksBase64,
   };
 }

@@ -25,6 +25,20 @@ export function createAuthRouter(ctx: AppContext) {
     new CompanyProfileRepository(ctx.db),
   );
 
+  async function handleSupabaseLogin(req: any, roleRawFallback: string) {
+    const auth = req.headers.authorization ?? "";
+    const token = auth.startsWith("Bearer ") ? auth.slice("Bearer ".length).trim() : "";
+    if (!token) throw Errors.unauthorized();
+
+    const body = req.body ?? {};
+    const roleRaw = requiredString(body.role ?? roleRawFallback, "role");
+    if (roleRaw !== "talento" && roleRaw !== "empresa") {
+      throw Errors.badRequest("Rol inválido.");
+    }
+
+    return await service.loginWithGoogle({ supabaseAccessToken: token, role: roleRaw });
+  }
+
   /**
    * Registro de talento.
    * Body: { email, password, fullName? }
@@ -35,7 +49,20 @@ export function createAuthRouter(ctx: AppContext) {
       const userEmail = email(body.email, "email");
       const userPassword = password(body.password, "password");
       const displayName = optionalString(body.fullName, "fullName") || userEmail.split("@")[0];
-      const out = await service.register({ role: "talento", email: userEmail, password: userPassword, displayName });
+      const acceptedTerms = body.acceptedTerms === true;
+      const acceptedPrivacy = body.acceptedPrivacy === true;
+      if (!acceptedTerms || !acceptedPrivacy) {
+        throw Errors.badRequest("Debes aceptar los Términos y la Política de Privacidad.");
+      }
+      const now = new Date().toISOString();
+      const out = await service.register({
+        role: "talento",
+        email: userEmail,
+        password: userPassword,
+        displayName,
+        acceptedTermsAt: now,
+        acceptedPrivacyAt: now,
+      });
       return res.status(201).json(out);
     } catch (e) {
       return next(e);
@@ -52,7 +79,15 @@ export function createAuthRouter(ctx: AppContext) {
       const userEmail = email(body.email, "email");
       const userPassword = password(body.password, "password");
       const displayName = optionalString(body.companyName, "companyName") || userEmail.split("@")[0];
-      const out = await service.register({ role: "empresa", email: userEmail, password: userPassword, displayName });
+      const now = new Date().toISOString();
+      const out = await service.register({
+        role: "empresa",
+        email: userEmail,
+        password: userPassword,
+        displayName,
+        acceptedTermsAt: now,
+        acceptedPrivacyAt: now,
+      });
       return res.status(201).json(out);
     } catch (e) {
       return next(e);
@@ -77,17 +112,25 @@ export function createAuthRouter(ctx: AppContext) {
 
   router.post("/login/google", async (req, res, next) => {
     try {
-      const auth = req.headers.authorization ?? "";
-      const token = auth.startsWith("Bearer ") ? auth.slice("Bearer ".length).trim() : "";
-      if (!token) throw Errors.unauthorized();
+      const out = await handleSupabaseLogin(req, "talento");
+      return res.json(out);
+    } catch (e) {
+      return next(e);
+    }
+  });
 
-      const body = req.body ?? {};
-      const roleRaw = requiredString(body.role ?? "talento", "role");
-      if (roleRaw !== "talento" && roleRaw !== "empresa") {
-        throw Errors.badRequest("Rol inválido.");
-      }
+  router.post("/login/linkedin", async (req, res, next) => {
+    try {
+      const out = await handleSupabaseLogin(req, "talento");
+      return res.json(out);
+    } catch (e) {
+      return next(e);
+    }
+  });
 
-      const out = await service.loginWithGoogle({ supabaseAccessToken: token, role: roleRaw });
+  router.post("/login/oauth", async (req, res, next) => {
+    try {
+      const out = await handleSupabaseLogin(req, "talento");
       return res.json(out);
     } catch (e) {
       return next(e);

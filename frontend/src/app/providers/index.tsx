@@ -11,6 +11,7 @@ import { BrowserRouter } from "react-router-dom";
 
 import { SessionProvider } from "@/entities/session";
 import { createOllamaClient } from "@/shared/api/ollama/client";
+import { routes } from "@/shared/config/routes";
 import { writeJson } from "@/shared/lib/storage";
 
 const STARTUP_CHECK_KEY = "firststep.ollama.startup-check.v1";
@@ -26,6 +27,20 @@ const DEFAULT_MODEL = "llama3.1";
  */
 export function AppProviders({ children }: { children: ReactNode }) {
   const client = useMemo(() => createOllamaClient(), []);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const hasOAuthSignal =
+      url.searchParams.has("code") ||
+      url.searchParams.has("error") ||
+      url.searchParams.has("error_description") ||
+      url.searchParams.has("error_code") ||
+      (url.hash ? url.hash.includes("access_token=") || url.hash.includes("error=") || url.hash.includes("error_description=") : false);
+
+    if (hasOAuthSignal && url.pathname !== routes.login) {
+      window.location.replace(`${routes.login}${window.location.search}${window.location.hash}`);
+    }
+  }, []);
 
   useEffect(() => {
     client

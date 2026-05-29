@@ -5,21 +5,71 @@
 // ║ Creado:      20-05-2026                                              ║
 // ╚══════════════════════════════════════════════════════════════════════╝
 
+import { useCallback, useState } from "react";
+
 import { useNavigate } from "react-router-dom";
 
 import { useSession } from "@/entities/session";
 import { routes } from "@/shared/config/routes";
 
 /**
- * Devuelve una función para registrar talento en modo mock.
- * En el estado actual, crea sesión local y redirige al onboarding.
+ * Registro de talento (API real).
+ *
+ * - POST /api/auth/register/talent
+ * - Persiste accessToken para llamadas posteriores
+ * - Crea sesión local (UI) y redirige a onboarding
  */
 export function useTalentSignUp() {
   const session = useSession();
   const navigate = useNavigate();
 
-  return (payload: { email: string }) => {
-    session.loginTalent(payload);
-    navigate(routes.onboarding);
-  };
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const clearError = useCallback(() => setError(null), []);
+
+  const signUp = useCallback(
+    async (payload: { email: string; password: string; fullName?: string; acceptedTerms: boolean; acceptedPrivacy: boolean }) => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const res = await fetch("/api/auth/register/talent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: payload.email,
+            password: payload.password,
+            fullName: payload.fullName,
+            acceptedTerms: payload.acceptedTerms,
+            acceptedPrivacy: payload.acceptedPrivacy,
+          }),
+        });
+
+        if (!res.ok) {
+          let message = `Registro falló (${res.status}).`;
+          try {
+            const data = (await res.json()) as any;
+            if (typeof data?.error?.message === "string" && data.error.message) {
+              message = data.error.message;
+            }
+          } catch { }
+          throw new Error(message);
+        }
+
+        const out = (await res.json()) as { accessToken?: string };
+        if (out.accessToken) localStorage.setItem("firststep.api.accessToken", out.accessToken);
+
+        session.loginTalent({ email: payload.email, onboardingCompleted: false });
+        navigate(routes.onboarding);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setError(msg);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [navigate, session],
+  );
+
+  return { signUp, isLoading, error, clearError };
 }
