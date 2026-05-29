@@ -12,6 +12,8 @@ import { Link } from "react-router-dom";
 
 import { useSession } from "@/entities/session";
 import { routes } from "@/shared/config/routes";
+import { createOllamaClient } from "@/shared/api/ollama/client";
+import type { OllamaMessage } from "@/shared/api/ollama/types";
 
 type ChatSender = "bot" | "user";
 
@@ -28,6 +30,13 @@ type EducationItem = {
   org: string;
   period: string;
 };
+
+function extractJsonObject(text: string) {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) return null;
+  return text.slice(start, end + 1);
+}
 
 /**
  * Genera un id simple para mensajes de chat/elementos de UI.
@@ -54,12 +63,15 @@ function themeClasses(theme: CvTheme) {
 
 /**
  * Página de generación/edición de CV basada en mock.
- *
- * Nota: este módulo es UI-first y no depende de Ollama; simula un flujo conversacional.
  */
 export function CvBuilderPage() {
   const session = useSession();
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const ollama = useMemo(() => createOllamaClient(), []);
+  const aiAbortRef = useRef<AbortController | null>(null);
+  const lastAiMessageIdRef = useRef<string | null>(null);
+  const didInitialAiRef = useRef(false);
+  const [isGeneratingCv, setIsGeneratingCv] = useState(false);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -117,6 +129,94 @@ export function CvBuilderPage() {
 
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
 
+  async function generateCvFromChat(chat: ChatMessage[]) {
+    aiAbortRef.current?.abort();
+    const abort = new AbortController();
+    aiAbortRef.current = abort;
+
+    setIsGeneratingCv(true);
+    try {
+      const transcript = chat
+        .map((m) => `${m.sender === "user" ? "Usuario" : "Asistente"}: ${m.text}`)
+        .join("\n\n");
+
+      const prompt = [
+        "A partir de este chat, genera mejoras para la VISTA PREVIA de un CV.",
+        "Devuelve SOLO un JSON válido (sin markdown) con estas claves opcionales:",
+        "- name: string",
+        "- location: string",
+        "- profile: string (3-5 líneas, estilo ATS, en español)",
+        "- experience: { title: string, company: string, period: string, bullets: string[] }",
+        "- education: Array<{ title: string, org: string, period: string }>",
+        "",
+        "Reglas:",
+        "- No inventes email o LinkedIn si no aparecen en el chat.",
+        "- Si no hay datos suficientes para una sección, omítela.",
+        "",
+        "CV actual (contacto):",
+        `name=${cvName}`,
+        `location=${cvLocation}`,
+        `email=${cvEmail}`,
+        `linkedin=${cvLinkedIn}`,
+        "",
+        "Chat:",
+        transcript,
+      ].join("\n");
+
+      const msgs: OllamaMessage[] = [
+        {
+          role: "system",
+          content: "Eres un asistente experto en redacción de CVs y ATS. Responde solo con JSON válido.",
+        },
+        { role: "user", content: prompt },
+      ];
+
+      let raw = "";
+      await ollama.streamChat({
+        model: "llama3.1",
+        messages: msgs,
+        signal: abort.signal,
+        onToken: (t) => {
+          raw += t;
+        },
+      });
+
+      const jsonText = extractJsonObject(raw) ?? raw.trim();
+      const parsed = JSON.parse(jsonText) as any;
+
+      if (typeof parsed?.name === "string" && parsed.name.trim()) setCvName(parsed.name.trim());
+      if (typeof parsed?.location === "string" && parsed.location.trim()) setCvLocation(parsed.location.trim());
+      if (typeof parsed?.profile === "string" && parsed.profile.trim()) setCvProfile(parsed.profile.trim());
+
+      const exp = parsed?.experience;
+      if (exp && typeof exp === "object") {
+        if (typeof exp.title === "string" && exp.title.trim()) setCvExperienceTitle(exp.title.trim());
+        if (typeof exp.company === "string" && exp.company.trim()) setCvCompany(exp.company.trim());
+        if (typeof exp.period === "string" && exp.period.trim()) setCvPeriod(exp.period.trim());
+        if (Array.isArray(exp.bullets)) {
+          const bullets = exp.bullets.map((b: unknown) => (typeof b === "string" ? b.trim() : "")).filter(Boolean);
+          if (bullets.length) setCvExperienceBullets(bullets);
+        }
+      }
+
+      if (Array.isArray(parsed?.education)) {
+        const edu = parsed.education
+          .map((e: any) => ({
+            title: typeof e?.title === "string" ? e.title.trim() : "",
+            org: typeof e?.org === "string" ? e.org.trim() : "",
+            period: typeof e?.period === "string" ? e.period.trim() : "",
+          }))
+          .filter((e: EducationItem) => e.title && e.org && e.period);
+        if (edu.length) setEducation(edu);
+      }
+    } catch {
+      if (abort.signal.aborted) return;
+    } finally {
+      if (aiAbortRef.current === abort) aiAbortRef.current = null;
+      setIsGeneratingCv(false);
+    }
+  }
+
   const quickActions = useMemo(() => {
     if (flowStep === 0) {
       return ["Añadir Experiencia", "Omitir por ahora", "Ver sugerencias de cargo"];
@@ -134,6 +234,19 @@ export function CvBuilderPage() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
+  useEffect(() => {
+    if (!didInitialAiRef.current) {
+      didInitialAiRef.current = true;
+      void generateCvFromChat(messages);
+      return;
+    }
+    const last = messages[messages.length - 1];
+    if (!last || last.sender !== "user") return;
+    if (lastAiMessageIdRef.current === last.id) return;
+    lastAiMessageIdRef.current = last.id;
+    void generateCvFromChat(messages);
+  }, [messages]);
+
   function appendMessage(sender: ChatSender, text: string) {
     setMessages((prev) => [...prev, { id: makeId(), sender, text }]);
   }
@@ -147,9 +260,6 @@ export function CvBuilderPage() {
           "bot",
           "Entendido. Cuéntame entonces, ¿qué objetivos te gustaría lograr en tu próximo rol corporativo?",
         );
-        setCvProfile(
-          "Profesional proactivo enfocado en la mejora continua y el liderazgo de proyectos de transformación digital.",
-        );
         setFlowStep(10);
         return;
       }
@@ -158,15 +268,6 @@ export function CvBuilderPage() {
         "bot",
         "¡Excelente! He analizado tu experiencia. He redactado un extracto profesional optimizado para sistemas ATS. ¿Qué opinas de estos puntos clave para tu experiencia?",
       );
-
-      setCvProfile(
-        "Director de Proyectos Senior experimentado con un historial comprobado en la entrega de proyectos complejos dentro del plazo y presupuesto acordados. Experto en alinear equipos de desarrollo de software con los objetivos de negocio usando metodologías ágiles.",
-      );
-      setCvExperienceBullets([
-        "Lideré un equipo de 15 personas para la implementación de metodologías ágiles, aumentando la velocidad de entrega en un 35%.",
-        "Supervisé el presupuesto global de proyectos tecnológicos evaluado en más de $1.2 millones de dólares anuales.",
-        "Reduje el tiempo de comercialización (time-to-market) en un 20% mediante automatización de flujos de trabajo.",
-      ]);
       setFlowStep(1);
       return;
     }
@@ -366,27 +467,6 @@ export function CvBuilderPage() {
               Currículum AI
             </button>
           </nav>
-
-          <div className="p-4 border-t border-slate-100">
-            <div className="bg-gradient-to-b from-[#1e3456] to-[#0f1d33] rounded-2xl p-4 text-white relative overflow-hidden">
-              <div className="relative z-10">
-                <span className="text-[9px] font-bold text-blue-300 uppercase tracking-widest">
-                  Plan Actual
-                </span>
-                <h4 className="font-bold text-sm mt-1">Upgrade to Pro</h4>
-                <p className="text-[10px] text-slate-300 mt-2 leading-relaxed">
-                  Accede a plantillas exclusivas y análisis de palabras clave ATS ilimitado.
-                </p>
-                <button
-                  type="button"
-                  className="w-full bg-white text-[#1e3456] text-xs font-semibold py-2 rounded-lg mt-4 hover:bg-blue-50 transition-colors"
-                >
-                  Saber Más
-                </button>
-              </div>
-              <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-white/5 rounded-full blur-xl" />
-            </div>
-          </div>
         </aside>
 
         <section className="no-print flex-1 flex flex-col bg-white border-r border-slate-200 h-full overflow-hidden">
@@ -417,9 +497,6 @@ export function CvBuilderPage() {
                 </div>
               </div>
             </div>
-            <span className="bg-[#f0f4f8] text-[#294266] text-[10px] font-bold tracking-wider px-3 py-1.5 rounded-full uppercase border border-[#e2e8f0]">
-              ATS Optimized
-            </span>
           </div>
 
           <div className="flex-1 p-6 overflow-y-auto bg-slate-50/50 space-y-6">
@@ -507,23 +584,6 @@ export function CvBuilderPage() {
 
           <div className="p-4 bg-white border-t border-slate-200 shrink-0">
             <form onSubmit={onSubmit} className="flex items-center gap-3 bg-[#f1f5f9] rounded-2xl p-2.5">
-              <button type="button" className="text-slate-400 hover:text-slate-600 p-2 rounded-xl transition-colors">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                  <line x1="12" x2="12" y1="19" y2="22" />
-                </svg>
-              </button>
               <input
                 type="text"
                 value={chatInput}
@@ -683,7 +743,9 @@ export function CvBuilderPage() {
                     </div>
                   ) : (
                     <div className="bg-slate-50/50 border border-slate-100 rounded-lg p-3 text-[11px] text-slate-500 leading-relaxed italic">
-                      Generando perfil optimizado basado en tu chat...
+                      {isGeneratingCv
+                        ? "Generando perfil optimizado basado en tu chat..."
+                        : "Responde en el chat para generar tu perfil profesional."}
                     </div>
                   )}
                 </div>
@@ -724,9 +786,6 @@ export function CvBuilderPage() {
                 </div>
               </div>
 
-              <div className="text-center pt-8 border-t border-slate-100 text-[8px] text-slate-300 font-medium tracking-widest uppercase mt-6">
-                Creado con FirsTep AI
-              </div>
             </div>
           </div>
 

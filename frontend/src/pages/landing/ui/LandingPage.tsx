@@ -225,7 +225,7 @@ export function LandingPage() {
               </p>
               <div className="mt-6 flex flex-col sm:flex-row gap-3">
                 <Link to={routes.companyLogin} className="w-full sm:w-auto">
-                  <Button className="w-full sm:w-auto rounded-full px-7 bg-white text-black hover:bg-slate-100">
+                  <Button className="w-full sm:w-auto rounded-full px-7 bg-white !text-black hover:bg-slate-100">
                     Login
                   </Button>
                 </Link>

@@ -19,14 +19,14 @@ import { Button, Input } from "@/shared/ui";
  */
 export function LoginPortalPage() {
   const navigate = useNavigate();
-  const loginTalent = useLoginTalent();
+  const { loginWithPassword, isLoading, error, clearError } = useLoginTalent();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   const isSubmitDisabled = useMemo(() => {
-    return email.trim().length === 0 || password.trim().length === 0;
-  }, [email, password]);
+    return email.trim().length === 0 || password.trim().length === 0 || isLoading;
+  }, [email, isLoading, password]);
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 md:p-8 bg-[#f6f8fb]">
@@ -43,11 +43,18 @@ export function LoginPortalPage() {
             Encuentra tu próximo paso en la industria tech.
           </p>
 
+          {error ? (
+            <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          ) : null}
+
           <form
             className="space-y-6"
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
-              loginTalent({ email });
+              clearError();
+              await loginWithPassword({ email, password });
             }}
           >
             <div>
