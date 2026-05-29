@@ -8,10 +8,6 @@
 import type { Env } from "../../config/env";
 import postgres from "postgres";
 
-const connectionString = process.env.DATABASE_URL;
-if (!connectionString) throw new Error("Falta DATABASE_URL.");
-const sql = postgres(connectionString);
-
 export type Db = {
   sql: any;
   execute<T = any>(sqlText: string, binds?: Record<string, any>): Promise<{ rows: T[] }>;
@@ -52,6 +48,8 @@ function compileNamedBinds(sqlText: string, binds: Record<string, any>) {
 export async function createDb(env: Env): Promise<Db> {
   if (!env.databaseUrl) throw new Error("Falta DATABASE_URL.");
 
+  const sql = postgres(env.databaseUrl);
+
   if (env.dbTestOnStartup) {
     try {
       await sql`SELECT 1 AS value`;
@@ -62,6 +60,19 @@ export async function createDb(env: Env): Promise<Db> {
       throw e;
     }
   }
+
+  try {
+    await sql.unsafe(`ALTER TABLE users ADD COLUMN IF NOT EXISTS accepted_terms_at TIMESTAMPTZ`, []);
+    await sql.unsafe(`ALTER TABLE users ADD COLUMN IF NOT EXISTS accepted_privacy_at TIMESTAMPTZ`, []);
+  } catch { }
+
+  try {
+    await sql.unsafe(`ALTER TABLE talent_profiles ADD COLUMN IF NOT EXISTS university VARCHAR(200)`, []);
+    await sql.unsafe(`ALTER TABLE talent_profiles ADD COLUMN IF NOT EXISTS degree VARCHAR(200)`, []);
+    await sql.unsafe(`ALTER TABLE talent_profiles ADD COLUMN IF NOT EXISTS grad_year INT`, []);
+    await sql.unsafe(`ALTER TABLE talent_profiles ADD COLUMN IF NOT EXISTS gpa NUMERIC(4, 2)`, []);
+    await sql.unsafe(`ALTER TABLE talent_profiles ADD COLUMN IF NOT EXISTS career_interests TEXT[]`, []);
+  } catch { }
 
   async function execute<T = any>(sqlText: string, binds: Record<string, any> = {}) {
     const { text, values } = compileNamedBinds(sqlText, binds);

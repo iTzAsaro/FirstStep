@@ -5,7 +5,7 @@
 // ║ Creado:      20-05-2026                                              ║
 // ╚══════════════════════════════════════════════════════════════════════╝
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useSession } from "@/entities/session";
 import { useCompleteOnboarding } from "@/features/onboarding/complete-profile/model/useCompleteOnboarding";
@@ -29,7 +29,7 @@ const DEFAULT_CAREERS = [
  */
 export function OnboardingUserPage() {
   const session = useSession();
-  const completeOnboarding = useCompleteOnboarding();
+  const { complete, isLoading, error, clearError } = useCompleteOnboarding();
 
   const fileRef = useRef<HTMLInputElement | null>(null);
 
@@ -49,13 +49,112 @@ export function OnboardingUserPage() {
     "Ciberseguridad",
   ]);
 
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
   const filteredCareers = useMemo(() => {
     const q = careerQuery.trim().toLowerCase();
     if (!q) return DEFAULT_CAREERS;
     return DEFAULT_CAREERS.filter((c) => c.toLowerCase().includes(q));
   }, [careerQuery]);
 
-  const canFinish = selectedCareers.length >= 3 && fullName.trim().length > 0;
+  const isProfileComplete = useMemo(() => {
+    const name = fullName.trim();
+    const cityValue = city.trim();
+    const uni = university.trim();
+    const deg = degree.trim();
+    const year = gradYear.trim();
+    return Boolean(name && cityValue && uni && deg && /^\d{4}$/.test(year) && selectedCareers.length >= 3);
+  }, [city, degree, fullName, gradYear, selectedCareers.length, university]);
+
+  useEffect(() => {
+    let alive = true;
+    const token = localStorage.getItem("firststep.api.accessToken") ?? "";
+    if (!token) return;
+
+    (async () => {
+      try {
+        const res = await fetch("/api/talent/profile", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const out = (await res.json()) as any;
+        const profile = out?.profile;
+        if (!alive || !profile) return;
+
+        setFullName(typeof profile.fullName === "string" ? profile.fullName : session.userName ?? "");
+        setPhone(typeof profile.phone === "string" ? profile.phone : "");
+        setCity(typeof profile.location === "string" ? profile.location : "");
+        setUniversity(typeof profile.university === "string" ? profile.university : "");
+        setDegree(typeof profile.degree === "string" ? profile.degree : "");
+        setGradYear(profile.gradYear ? String(profile.gradYear) : "");
+        setGpa(typeof profile.gpa === "string" ? profile.gpa : "");
+        if (Array.isArray(profile.careerInterests) && profile.careerInterests.length) {
+          setSelectedCareers(profile.careerInterests.filter((v: any) => typeof v === "string"));
+        }
+      } catch { }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [session.userName]);
+
+  const canFinish = useMemo(() => {
+    const name = fullName.trim();
+    const cityValue = city.trim();
+    const uni = university.trim();
+    const deg = degree.trim();
+    const year = gradYear.trim();
+    return Boolean(
+      name &&
+      cityValue &&
+      uni &&
+      deg &&
+      /^\d{4}$/.test(year) &&
+      selectedCareers.length >= 3,
+    );
+  }, [city, degree, fullName, gradYear, selectedCareers.length, university]);
+
+  const validate = () => {
+    const next: Record<string, string> = {};
+
+    const name = fullName.trim();
+    if (!name) next.fullName = "Nombre completo es requerido.";
+
+    const cityValue = city.trim();
+    if (!cityValue) next.city = "Ciudad actual es requerida.";
+
+    const uni = university.trim();
+    if (!uni) next.university = "Universidad / Instituto es requerido.";
+
+    const deg = degree.trim();
+    if (!deg) next.degree = "Programa de grado es requerido.";
+
+    const year = gradYear.trim();
+    if (!/^\d{4}$/.test(year)) {
+      next.gradYear = "Año de graduación debe ser un año de 4 dígitos.";
+    } else {
+      const y = Number(year);
+      if (y < 1900 || y > 2100) next.gradYear = "Año de graduación es inválido.";
+    }
+
+    const phoneValue = phone.trim();
+    if (phoneValue) {
+      const digits = phoneValue.replace(/[^\d]/g, "");
+      if (digits.length < 7 || digits.length > 15) next.phone = "Número de teléfono es inválido.";
+    }
+
+    const gpaValue = gpa.trim();
+    if (gpaValue) {
+      const n = Number(gpaValue);
+      if (!Number.isFinite(n) || n < 0 || n > 5) next.gpa = "Promedio es inválido.";
+    }
+
+    if (selectedCareers.length < 3) next.careerInterests = "Selecciona al menos 3 opciones.";
+
+    setFieldErrors(next);
+    return Object.keys(next).length === 0;
+  };
 
   return (
     <div className="min-h-screen pb-12 flex flex-col items-center bg-[#f8fafc] text-slate-800">
@@ -176,13 +275,38 @@ export function OnboardingUserPage() {
                 <label className="block text-[11px] font-bold text-[#1e3456] uppercase tracking-wider mb-2">
                   Nombre Completo
                 </label>
-                <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Alex Johnson" />
+                <Input
+                  value={fullName}
+                  onChange={(e) => {
+                    clearError();
+                    setFullName(e.target.value);
+                    setFieldErrors((p) => {
+                      const { fullName: _removed, ...rest } = p;
+                      return rest;
+                    });
+                  }}
+                  placeholder="Alex Johnson"
+                />
+                {fieldErrors.fullName ? <div className="text-[12px] text-red-600 mt-2">{fieldErrors.fullName}</div> : null}
               </div>
               <div>
                 <label className="block text-[11px] font-bold text-[#1e3456] uppercase tracking-wider mb-2">
                   Número de Teléfono
                 </label>
-                <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 (555) 000-0000" type="tel" />
+                <Input
+                  value={phone}
+                  onChange={(e) => {
+                    clearError();
+                    setPhone(e.target.value);
+                    setFieldErrors((p) => {
+                      const { phone: _removed, ...rest } = p;
+                      return rest;
+                    });
+                  }}
+                  placeholder="+1 (555) 000-0000"
+                  type="tel"
+                />
+                {fieldErrors.phone ? <div className="text-[12px] text-red-600 mt-2">{fieldErrors.phone}</div> : null}
               </div>
               <div className="md:col-span-2">
                 <label className="block text-[11px] font-bold text-[#1e3456] uppercase tracking-wider mb-2">
@@ -190,7 +314,14 @@ export function OnboardingUserPage() {
                 </label>
                 <Input
                   value={city}
-                  onChange={(e) => setCity(e.target.value)}
+                  onChange={(e) => {
+                    clearError();
+                    setCity(e.target.value);
+                    setFieldErrors((p) => {
+                      const { city: _removed, ...rest } = p;
+                      return rest;
+                    });
+                  }}
                   placeholder="San Francisco, CA"
                   leftSlot={
                     <svg
@@ -210,6 +341,7 @@ export function OnboardingUserPage() {
                     </svg>
                   }
                 />
+                {fieldErrors.city ? <div className="text-[12px] text-red-600 mt-2">{fieldErrors.city}</div> : null}
               </div>
             </div>
           </div>
@@ -243,13 +375,37 @@ export function OnboardingUserPage() {
                 <label className="block text-[11px] font-bold text-[#1e3456] uppercase tracking-wider mb-2">
                   Universidad / Instituto
                 </label>
-                <Input value={university} onChange={(e) => setUniversity(e.target.value)} placeholder="Universidad de Stanford" />
+                <Input
+                  value={university}
+                  onChange={(e) => {
+                    clearError();
+                    setUniversity(e.target.value);
+                    setFieldErrors((p) => {
+                      const { university: _removed, ...rest } = p;
+                      return rest;
+                    });
+                  }}
+                  placeholder="Universidad de Stanford"
+                />
+                {fieldErrors.university ? <div className="text-[12px] text-red-600 mt-2">{fieldErrors.university}</div> : null}
               </div>
               <div className="md:col-span-6">
                 <label className="block text-[11px] font-bold text-[#1e3456] uppercase tracking-wider mb-2">
                   Programa de Grado
                 </label>
-                <Input value={degree} onChange={(e) => setDegree(e.target.value)} placeholder="Lic. Ciencias de la Computación" />
+                <Input
+                  value={degree}
+                  onChange={(e) => {
+                    clearError();
+                    setDegree(e.target.value);
+                    setFieldErrors((p) => {
+                      const { degree: _removed, ...rest } = p;
+                      return rest;
+                    });
+                  }}
+                  placeholder="Lic. Ciencias de la Computación"
+                />
+                {fieldErrors.degree ? <div className="text-[12px] text-red-600 mt-2">{fieldErrors.degree}</div> : null}
               </div>
               <div className="md:col-span-3">
                 <label className="block text-[11px] font-bold text-[#1e3456] uppercase tracking-wider mb-2">
@@ -257,11 +413,19 @@ export function OnboardingUserPage() {
                 </label>
                 <Input
                   value={gradYear}
-                  onChange={(e) => setGradYear(e.target.value)}
+                  onChange={(e) => {
+                    clearError();
+                    setGradYear(e.target.value);
+                    setFieldErrors((p) => {
+                      const { gradYear: _removed, ...rest } = p;
+                      return rest;
+                    });
+                  }}
                   placeholder="2024"
                   inputMode="numeric"
                   className="text-center md:text-left"
                 />
+                {fieldErrors.gradYear ? <div className="text-[12px] text-red-600 mt-2">{fieldErrors.gradYear}</div> : null}
               </div>
               <div className="md:col-span-3">
                 <label className="block text-[11px] font-bold text-[#1e3456] uppercase tracking-wider mb-2">
@@ -269,11 +433,19 @@ export function OnboardingUserPage() {
                 </label>
                 <Input
                   value={gpa}
-                  onChange={(e) => setGpa(e.target.value)}
+                  onChange={(e) => {
+                    clearError();
+                    setGpa(e.target.value);
+                    setFieldErrors((p) => {
+                      const { gpa: _removed, ...rest } = p;
+                      return rest;
+                    });
+                  }}
                   placeholder="3.8"
                   inputMode="decimal"
                   className="text-center md:text-left"
                 />
+                {fieldErrors.gpa ? <div className="text-[12px] text-red-600 mt-2">{fieldErrors.gpa}</div> : null}
               </div>
             </div>
           </div>
@@ -339,9 +511,14 @@ export function OnboardingUserPage() {
                     key={career}
                     type="button"
                     onClick={() => {
+                      clearError();
                       setSelectedCareers((prev) => {
                         if (prev.includes(career)) return prev.filter((c) => c !== career);
                         return [...prev, career];
+                      });
+                      setFieldErrors((p) => {
+                        const { careerInterests: _removed, ...rest } = p;
+                        return rest;
                       });
                     }}
                     className={cn(
@@ -373,6 +550,9 @@ export function OnboardingUserPage() {
                 );
               })}
             </div>
+            {fieldErrors.careerInterests ? (
+              <div className="text-[12px] text-red-600 mt-4">{fieldErrors.careerInterests}</div>
+            ) : null}
           </div>
 
           <div className="flex flex-col sm:flex-row items-center justify-between mt-8 gap-6 px-2">
@@ -381,13 +561,23 @@ export function OnboardingUserPage() {
             </p>
             <Button
               type="button"
-              disabled={!canFinish}
+              disabled={!canFinish || isLoading}
               className="bg-[#243f65] hover:bg-[#15263d] shadow-lg shadow-[#243f65]/20 rounded-full px-8 py-4 w-full sm:w-auto justify-center"
-              onClick={() => {
-                completeOnboarding();
+              onClick={async () => {
+                if (!validate()) return;
+                await complete({
+                  fullName: fullName.trim(),
+                  phone: phone.trim() ? phone.trim() : null,
+                  city: city.trim(),
+                  university: university.trim(),
+                  degree: degree.trim(),
+                  gradYear: gradYear.trim(),
+                  gpa: gpa.trim() ? gpa.trim() : null,
+                  careerInterests: selectedCareers,
+                });
               }}
             >
-              Finalizar Perfil
+              {isLoading ? "Guardando..." : isProfileComplete ? "Guardar cambios" : "Finalizar Perfil"}
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 width="18"
@@ -404,6 +594,13 @@ export function OnboardingUserPage() {
               </svg>
             </Button>
           </div>
+          {error ? (
+            <div className="mt-6 px-2">
+              <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+                {error}
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
 

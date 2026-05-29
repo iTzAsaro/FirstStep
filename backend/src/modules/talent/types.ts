@@ -14,6 +14,11 @@ export type TalentProfile = {
   headline: string | null;
   location: string | null;
   phone: string | null;
+  university: string | null;
+  degree: string | null;
+  gradYear: number | null;
+  gpa: string | null;
+  careerInterests: string[] | null;
   linkedin: string | null;
   github: string | null;
   portfolio: string | null;

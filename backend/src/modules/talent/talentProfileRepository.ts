@@ -9,7 +9,23 @@ import type { Db } from "../../shared/db/postgreSQL";
 
 import type { TalentProfile } from "./types";
 
-export type UpsertTalentProfileInput = Partial<Pick<TalentProfile, "fullName" | "headline" | "location" | "phone" | "linkedin" | "github" | "portfolio">>;
+export type UpsertTalentProfileInput = Partial<
+  Pick<
+    TalentProfile,
+    | "fullName"
+    | "headline"
+    | "location"
+    | "phone"
+    | "university"
+    | "degree"
+    | "gradYear"
+    | "gpa"
+    | "careerInterests"
+    | "linkedin"
+    | "github"
+    | "portfolio"
+  >
+>;
 
 /**
  * Repositorio de perfil de talento.
@@ -29,6 +45,11 @@ export class TalentProfileRepository {
               headline,
               location,
               phone,
+              university,
+              degree,
+              grad_year as "gradYear",
+              gpa::text as "gpa",
+              career_interests as "careerInterests",
               linkedin,
               github,
               portfolio,
@@ -52,6 +73,11 @@ export class TalentProfileRepository {
       headline: input.headline ?? current?.headline ?? null,
       location: input.location ?? current?.location ?? null,
       phone: input.phone ?? current?.phone ?? null,
+      university: input.university ?? current?.university ?? null,
+      degree: input.degree ?? current?.degree ?? null,
+      gradYear: input.gradYear ?? current?.gradYear ?? null,
+      gpa: input.gpa ?? current?.gpa ?? null,
+      careerInterests: input.careerInterests ?? current?.careerInterests ?? null,
       linkedin: input.linkedin ?? current?.linkedin ?? null,
       github: input.github ?? current?.github ?? null,
       portfolio: input.portfolio ?? current?.portfolio ?? null,
@@ -59,14 +85,19 @@ export class TalentProfileRepository {
 
     await this.db.execute(
       `INSERT INTO talent_profiles
-        (user_id, full_name, headline, location, phone, linkedin, github, portfolio, created_at, updated_at)
+        (user_id, full_name, headline, location, phone, university, degree, grad_year, gpa, career_interests, linkedin, github, portfolio, created_at, updated_at)
        VALUES
-        (:userId, :fullName, :headline, :location, :phone, :linkedin, :github, :portfolio, NOW(), NOW())
+        (:userId, :fullName, :headline, :location, :phone, :university, :degree, :gradYear, :gpa, :careerInterests, :linkedin, :github, :portfolio, NOW(), NOW())
        ON CONFLICT (user_id) DO UPDATE SET
         full_name = EXCLUDED.full_name,
         headline = EXCLUDED.headline,
         location = EXCLUDED.location,
         phone = EXCLUDED.phone,
+        university = EXCLUDED.university,
+        degree = EXCLUDED.degree,
+        grad_year = EXCLUDED.grad_year,
+        gpa = EXCLUDED.gpa,
+        career_interests = EXCLUDED.career_interests,
         linkedin = EXCLUDED.linkedin,
         github = EXCLUDED.github,
         portfolio = EXCLUDED.portfolio,

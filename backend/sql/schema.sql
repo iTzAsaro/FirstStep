@@ -4,6 +4,8 @@ CREATE TABLE users (
   role VARCHAR(20) NOT NULL CHECK (role IN ('talento', 'empresa')),
   password_hash VARCHAR(255) NOT NULL,
   supabase_user_id UUID UNIQUE,
+  accepted_terms_at TIMESTAMPTZ,
+  accepted_privacy_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
   updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
@@ -14,6 +16,11 @@ CREATE TABLE talent_profiles (
   headline VARCHAR(200),
   location VARCHAR(200),
   phone VARCHAR(50),
+  university VARCHAR(200),
+  degree VARCHAR(200),
+  grad_year INT,
+  gpa NUMERIC(4, 2),
+  career_interests TEXT[],
   linkedin VARCHAR(300),
   github VARCHAR(300),
   portfolio VARCHAR(300),
