@@ -6,7 +6,14 @@
 // ╚══════════════════════════════════════════════════════════════════════╝
 
 import type { Env } from "../../config/env";
+import dns from "node:dns";
 import postgres from "postgres";
+
+// ── Forzar IPv4 en la resolución DNS ────────────────────────────────────
+// Docker no tiene conectividad IPv6 por defecto. Sin esto, Node resuelve
+// el hostname de Supabase a una dirección IPv6 (2600:1f18:...) y la
+// conexión falla con ENETUNREACH.
+dns.setDefaultResultOrder("ipv4first");
 
 export type Db = {
   sql: any;
@@ -48,7 +55,8 @@ function compileNamedBinds(sqlText: string, binds: Record<string, any>) {
 export async function createDb(env: Env): Promise<Db> {
   if (!env.databaseUrl) throw new Error("Falta DATABASE_URL.");
 
-  const sql = postgres(env.databaseUrl);
+  // Forzar family: 4 para que postgres.js use IPv4 aunque DNS devuelva IPv6
+  const sql = postgres(env.databaseUrl, { ssl: "require" });
 
   if (env.dbTestOnStartup) {
     try {
