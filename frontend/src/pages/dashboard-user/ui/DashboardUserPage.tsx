@@ -15,19 +15,27 @@ import { useLogout } from "@/features/auth/logout/model/useLogout";
 import { routes } from "@/shared/config/routes";
 import { Button } from "@/shared/ui";
 
-type StatCard = {
-  title: string;
-  value: string;
-  badge?: { text: string; tone: "success" | "neutral" };
-  highlight?: boolean;
-};
-
 type ActivityItem = {
   text: string;
   time: string;
   tone: "blue" | "emerald" | "purple" | "slate";
   icon: ReactNode;
 };
+
+function prettifyNameFromEmail(email: string | null | undefined) {
+  const local = (email ?? "").split("@")[0] ?? "";
+  const cleaned = local.replace(/[._-]+/g, " ").trim();
+  if (!cleaned) return "";
+  return cleaned
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function hasText(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0;
+}
 
 /**
  * Renderiza el dashboard principal del usuario (talento) en modo mock.
@@ -120,21 +128,6 @@ export function DashboardUserPage() {
     };
   }, []);
 
-  const name = (data?.profile?.fullName as string | null) ?? session.userName ?? "Alex";
-
-  const stats: StatCard[] = useMemo(() => {
-    const cvsCount = Number(data?.stats?.cvsCount ?? 0);
-    const aiSessionsCount = Number(data?.stats?.aiSessionsCount ?? 0);
-    const interviewsCount = Number(data?.stats?.interviewsCount ?? 0);
-    const profileCompleteness = Number(data?.stats?.profileCompleteness ?? 0);
-    return [
-      { title: "CVs Creados", value: String(cvsCount).padStart(2, "0") },
-      { title: "Sesiones IA", value: String(aiSessionsCount) },
-      { title: "Entrevistas IA", value: String(interviewsCount) },
-      { title: "Perfil Completo", value: `${profileCompleteness}%`, highlight: true },
-    ];
-  }, [data]);
-
   const recentCvs = (data?.recent?.cvs ?? []) as Array<{ id: string; title: string; updatedAt: string }>;
   const recentSessions = (data?.recent?.sessions ?? []) as Array<{ id: string; kind: string; title: string; model: string; updatedAt: string }>;
   const jobRows = (jobs ?? []) as Array<{
@@ -197,8 +190,62 @@ export function DashboardUserPage() {
     });
   }, [data]);
 
+  const fullName =
+    (typeof data?.profile?.fullName === "string" && data.profile.fullName.trim()) ||
+    prettifyNameFromEmail(typeof data?.user?.email === "string" ? data.user.email : null) ||
+    session.userName ||
+    "Tu perfil";
+  const topInterests = Array.isArray(data?.profile?.careerInterests)
+    ? (data.profile.careerInterests as string[]).slice(0, 4)
+    : [];
+  const availableJobsCount = jobRows.filter((job) => !job.hasApplied).length;
+  const hasLocation = hasText(data?.profile?.location);
+  const hasEducation = hasText(data?.profile?.university) || hasText(data?.profile?.degree);
+  const hasInterests = topInterests.length > 0;
+  const quickStartItems = [
+    {
+      title: "Completa tu perfil",
+      description: hasLocation && hasEducation && hasInterests
+        ? "Tu perfil ya comunica una base sólida para reclutadores."
+        : "Agrega ubicación, formación e intereses para mejorar tus recomendaciones.",
+      action: "Ir al perfil",
+      onClick: () => navigate(routes.onboarding),
+      state: hasLocation && hasEducation && hasInterests ? "Listo" : "Recomendado",
+    },
+    {
+      title: "Crea tu CV con IA",
+      description: recentCvs.length > 0
+        ? "Retoma tu currículum y ajústalo para tu próxima aplicación."
+        : "Convierte tu experiencia en un CV más claro, fuerte y listo para enviar.",
+      action: recentCvs.length > 0 ? "Continuar CV" : "Crear CV",
+      onClick: () => navigate(routes.cvBuilder),
+      state: recentCvs.length > 0 ? "En progreso" : "Prioridad",
+    },
+    {
+      title: "Practica entrevistas",
+      description: recentSessions.some((sessionItem) => sessionItem.kind === "interview")
+        ? "Sigue afinando tus respuestas con nuevas simulaciones."
+        : "Ensaya respuestas, gana confianza y llega mejor preparado a tus entrevistas.",
+      action: "Empezar práctica",
+      onClick: () => navigate(routes.interview),
+      state: recentSessions.some((sessionItem) => sessionItem.kind === "interview") ? "Activo" : "Nuevo",
+    },
+  ];
+  const formatSalary = (min: number | null, max: number | null) => {
+    if (min === null && max === null) return "Compensación a convenir";
+    const format = (value: number) =>
+      new Intl.NumberFormat("es-ES", {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: 0,
+      }).format(value);
+    if (min !== null && max !== null) return `${format(min)} - ${format(max)}`;
+    if (min !== null) return `Desde ${format(min)}`;
+    return `Hasta ${format(max as number)}`;
+  };
+
   return (
-    <div className="min-h-screen flex flex-col text-slate-800 bg-[#f8fafc]">
+    <div className="min-h-screen flex flex-col text-slate-800 bg-[linear-gradient(180deg,#eef4fb_0%,#f8fafc_24%,#f8fafc_100%)]">
       {applyModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <button
@@ -316,296 +363,192 @@ export function DashboardUserPage() {
         </div>
       ) : null}
 
-      <nav className="bg-white border-b border-slate-200 sticky top-0 z-50">
-        <div className="max-w-[1400px] mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-10">
+      <nav className="sticky top-0 z-40 border-b border-white/70 bg-white/80 backdrop-blur-xl">
+        <div className="mx-auto flex h-20 max-w-[1400px] items-center justify-between px-5 sm:px-6">
+          <div className="flex items-center gap-4 sm:gap-8">
             <button
               type="button"
               onClick={() => navigate(routes.dashboard)}
-              className="font-bold text-[#1e3456] text-xl tracking-tight"
+              className="flex items-center gap-3"
             >
-              FirsTep
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#1e3456,#5d85c4)] text-sm font-bold text-white shadow-lg shadow-[#294266]/20">
+                FT
+              </span>
+              <span className="hidden sm:block">
+                <span className="block text-lg font-bold tracking-tight text-[#1e3456]">FirsTep</span>
+                <span className="block text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-400">
+                  Career Momentum
+                </span>
+              </span>
             </button>
 
-            <div className="hidden md:flex items-center h-16 gap-8 text-sm font-medium">
-              <button
-                type="button"
-                className="h-full flex items-center text-[#294266] border-b-2 border-[#294266]"
-              >
-                Panel
-              </button>
-              <button
-                type="button"
-                className="h-full flex items-center text-slate-500 hover:text-slate-800 transition-colors border-b-2 border-transparent"
-              >
-                Fondo de Talento
-              </button>
-              <button
-                type="button"
-                className="h-full flex items-center text-slate-500 hover:text-slate-800 transition-colors border-b-2 border-transparent"
-              >
-                Ofertas de Trabajo
-              </button>
-              <button
-                type="button"
-                className="h-full flex items-center text-slate-500 hover:text-slate-800 transition-colors border-b-2 border-transparent"
-              >
-                Análisis
-              </button>
+            <div className="hidden lg:flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 p-1">
+              {[
+                { label: "Resumen", path: routes.dashboard },
+                { label: "Oportunidades", path: routes.opportunities },
+                { label: "IA", path: routes.chat },
+              ].map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => navigate(item.path)}
+                  className={[
+                    "rounded-full px-4 py-2 text-sm font-medium transition-colors",
+                    item.path === routes.dashboard ? "bg-white text-[#1e3456] shadow-sm" : "text-slate-500 hover:text-[#1e3456]",
+                  ].join(" ")}
+                >
+                  {item.label}
+                </button>
+              ))}
             </div>
           </div>
 
-          <div className="flex items-center gap-6">
-            <div className="hidden lg:block relative w-64">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="text-slate-400"
-                >
-                  <circle cx="11" cy="11" r="8" />
-                  <path d="m21 21-4.3-4.3" />
-                </svg>
-              </div>
-              <input
-                type="text"
-                placeholder="Buscar talento..."
-                className="w-full bg-[#f1f5f9] text-slate-700 rounded-full pl-10 pr-4 py-2 outline-none focus:ring-2 focus:ring-[#294266]/20 transition-all text-sm border border-transparent"
-              />
-            </div>
-
-            <div className="flex items-center gap-4 text-slate-400">
-              <button type="button" className="hover:text-slate-600 transition-colors relative">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
-                  <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
-                </svg>
-                <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full border border-white" />
-              </button>
-              <button type="button" className="hover:text-slate-600 transition-colors">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                className="w-8 h-8 rounded-full border border-slate-200 overflow-hidden ml-2"
-              >
-                <img src="https://i.pravatar.cc/150?img=32" alt="" className="w-full h-full object-cover" />
-              </button>
-            </div>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigate(routes.cvBuilder)}
+              className="hidden sm:inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-[#1e3456] shadow-sm transition-colors hover:border-[#294266] hover:text-[#294266]"
+            >
+              Mejorar CV
+            </button>
+            <button
+              type="button"
+              onClick={logout}
+              className="inline-flex rounded-full bg-[#1e3456] px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-[#294266]/15 transition-colors hover:bg-[#15263d]"
+            >
+              Cerrar sesión
+            </button>
           </div>
         </div>
       </nav>
 
-      <main className="max-w-[1400px] mx-auto px-6 py-8 w-full flex-1">
+      <main className="mx-auto w-full max-w-[1400px] flex-1 px-5 py-8 sm:px-6 lg:py-10">
         {isLoading ? (
-          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 text-sm text-slate-600 mb-8">
+          <div className="mb-8 rounded-3xl border border-white/80 bg-white p-5 text-sm text-slate-600 shadow-sm">
             Cargando dashboard...
           </div>
         ) : loadError ? (
-          <div className="bg-red-50 rounded-2xl p-4 shadow-sm border border-red-200 text-sm text-red-700 mb-8">
+          <div className="mb-8 rounded-3xl border border-red-200 bg-red-50 p-5 text-sm text-red-700 shadow-sm">
             {loadError}
           </div>
         ) : null}
 
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-10 gap-4">
-          <div>
-            <h1 className="text-3xl md:text-4xl font-bold text-[#1e3456] mb-2 tracking-tight">
-              Bienvenido de nuevo, {name}.
-            </h1>
-            <p className="text-slate-500 text-sm md:text-base">
-              {data?.profile?.careerInterests?.length
-                ? `Intereses: ${(data.profile.careerInterests as string[]).slice(0, 3).join(", ")}.`
-                : "Completa tu perfil para mejorar tus recomendaciones."}
-            </p>
-          </div>
-          <div className="flex flex-col sm:flex-row flex-wrap gap-3 w-full sm:w-auto">
-            <Button
-              type="button"
-              variant="outline"
-              className="px-5 py-2.5 rounded-lg font-medium text-sm"
-              onClick={() => navigate(routes.cvBuilder)}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-                <polyline points="14 2 14 8 20 8" />
-                <line x1="16" y1="13" x2="8" y2="13" />
-                <line x1="16" y1="17" x2="8" y2="17" />
-              </svg>
-              Currículum AI
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              className="px-5 py-2.5 rounded-lg font-medium text-sm"
-              onClick={() => navigate(routes.chat)}
-            >
-              Chat
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              className="px-5 py-2.5 rounded-lg font-medium text-sm"
-              onClick={() => navigate(routes.interview)}
-            >
-              Simulación de entrevistas
-            </Button>
-            <Button
-              type="button"
-              className="px-5 py-2.5 rounded-lg font-medium text-sm"
-              onClick={() => navigate(routes.onboarding)}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M5 12h14" />
-                <path d="M12 5v14" />
-              </svg>
-              Actualizar Perfil
-            </Button>
-          </div>
-        </div>
+        <section className="mb-8 overflow-hidden rounded-[2rem] border border-white/80 bg-[linear-gradient(135deg,#18314f_0%,#294266_42%,#5d85c4_100%)] px-6 py-7 text-white shadow-[0_24px_80px_-30px_rgba(30,52,86,0.45)] sm:px-8 sm:py-8">
+          <div className="grid gap-8 xl:grid-cols-[minmax(0,1.4fr)_360px]">
+            <div className="min-w-0">
+              <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-blue-100">
+                Primer acceso
+              </span>
+              <h1 className="mt-5 max-w-3xl text-4xl font-bold tracking-tight sm:text-5xl">
+                Bienvenido a FirsTep, {fullName}.
+              </h1>
+              <p className="mt-4 max-w-2xl text-sm leading-7 text-blue-100/90 sm:text-base">
+                Este panel reúne lo más importante para tu primer impulso: completar tu propuesta profesional, crear un CV convincente y empezar a descubrir oportunidades alineadas contigo.
+              </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-          {stats.map((card) => {
-            if (card.highlight) {
-              return (
-                <div
-                  key={card.title}
-                  className="bg-[#294266] rounded-2xl p-6 shadow-md shadow-[#294266]/20 flex flex-col justify-between relative overflow-hidden"
+              <div className="mt-6 flex flex-wrap gap-2.5">
+                {topInterests.length > 0 ? topInterests.map((interest) => (
+                  <span
+                    key={interest}
+                    className="inline-flex rounded-full border border-white/15 bg-white/10 px-3 py-2 text-xs font-semibold text-white/95"
+                  >
+                    {interest}
+                  </span>
+                )) : (
+                  <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-3 py-2 text-xs font-semibold text-white/95">
+                    Completa tus intereses para personalizar recomendaciones
+                  </span>
+                )}
+              </div>
+
+              <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                <Button
+                  type="button"
+                  className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#1e3456] hover:bg-blue-50"
+                  onClick={() => navigate(routes.onboarding)}
                 >
-                  <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/5 rounded-full blur-xl" />
-                  <h3 className="text-[10px] font-bold text-blue-200/80 tracking-widest uppercase mb-4 relative z-10">
-                    {card.title}
-                  </h3>
-                  <div className="flex items-end justify-between relative z-10">
-                    <span className="text-4xl font-bold text-white">{card.value}</span>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="24"
-                      height="24"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="text-blue-200/80"
-                    >
-                      <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
-                      <path d="M5 3v4" />
-                      <path d="M19 17v4" />
-                      <path d="M3 5h4" />
-                      <path d="M17 19h4" />
-                    </svg>
-                  </div>
-                </div>
-              );
-            }
+                  Completar mi perfil
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="rounded-full border border-white/15 bg-white/10 px-5 py-3 text-sm font-semibold text-white hover:bg-white/15"
+                  onClick={() => navigate(routes.cvBuilder)}
+                >
+                  Crear CV con IA
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="rounded-full border border-white/15 bg-white/10 px-5 py-3 text-sm font-semibold text-white hover:bg-white/15"
+                  onClick={() => navigate(routes.interview)}
+                >
+                  Practicar entrevista
+                </Button>
+              </div>
+            </div>
 
-            return (
-              <div
-                key={card.title}
-                className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 flex flex-col justify-between"
-              >
-                <h3 className="text-[10px] font-bold text-slate-400 tracking-widest uppercase mb-4">
-                  {card.title}
-                </h3>
-                <div className="flex items-end justify-between">
-                  <span className="text-4xl font-bold text-[#1e3456]">{card.value}</span>
-                  {card.badge ? (
-                    <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">
-                      {card.badge.text}
-                    </span>
-                  ) : null}
-                  {!card.badge && card.title === "Aplicaciones Totales" ? (
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="24"
-                      height="24"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="text-slate-300"
-                    >
-                      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                      <circle cx="9" cy="7" r="4" />
-                      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-                      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                    </svg>
-                  ) : null}
-                  {!card.badge && card.title === "Entrevistas Pendientes" ? (
-                    <div className="flex -space-x-2">
-                      <div className="w-6 h-6 rounded-full bg-slate-200 border-2 border-white" />
-                      <div className="w-6 h-6 rounded-full bg-[#5d85c4] border-2 border-white" />
+            <div className="rounded-[1.75rem] border border-white/15 bg-white/10 p-5 backdrop-blur">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-blue-100">Lo más útil ahora</p>
+                  <p className="mt-2 text-2xl font-bold text-white">Tu siguiente mejor movimiento</p>
+                </div>
+                <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold text-white">
+                  {availableJobsCount} vacantes nuevas
+                </span>
+              </div>
+
+              <div className="mt-6 space-y-3">
+                {quickStartItems.map((item) => (
+                  <button
+                    key={item.title}
+                    type="button"
+                    onClick={item.onClick}
+                    className="flex w-full items-start justify-between gap-4 rounded-2xl border border-white/10 bg-slate-950/10 p-4 text-left transition-colors hover:bg-white/10"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-white">{item.title}</p>
+                      <p className="mt-1 text-sm leading-6 text-blue-100/90">{item.description}</p>
                     </div>
-                  ) : null}
+                    <div className="shrink-0 text-right">
+                      <span className="inline-flex rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white">
+                        {item.state}
+                      </span>
+                      <p className="mt-3 text-xs font-bold text-white">{item.action}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div className="grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1.7fr)_360px]">
+          <div className="space-y-8">
+            <section className="rounded-[2rem] border border-white/80 bg-white p-6 shadow-sm sm:p-7">
+              <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#5d7ba6]">Oportunidades para ti</p>
+                  <h2 className="mt-2 text-2xl font-bold tracking-tight text-[#1e3456]">
+                    Vacantes que encajan con tu momento profesional
+                  </h2>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="rounded-full border border-[#dde7f5] bg-[#f7faff] px-4 py-2 text-xs font-semibold text-[#294266]">
+                    {jobRows.length} activas
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => navigate(routes.opportunities)}
+                    className="text-xs font-semibold text-[#294266] hover:underline"
+                  >
+                    Ver todas
+                  </button>
                 </div>
               </div>
-            );
-          })}
-        </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-          <div className="xl:col-span-2 space-y-10">
-            <section>
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-[#1e3456] tracking-tight">
-                  Ofertas disponibles
-                </h2>
-              </div>
-
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+              <div className="overflow-hidden rounded-[1.5rem] border border-slate-100 bg-slate-50/50">
                 {jobsLoading ? (
                   <div className="p-6">
                     <p className="text-sm text-slate-500">Cargando ofertas...</p>
@@ -621,185 +564,237 @@ export function DashboardUserPage() {
                 ) : (
                   <div className="divide-y divide-slate-100">
                     {jobRows.slice(0, 6).map((j) => (
-                      <div key={j.id} className="px-6 py-4 flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-[#1e3456] truncate">{j.title}</p>
-                          <p className="text-[11px] text-slate-400 mt-1">
-                            {(j.companyName ?? "Empresa")}{j.location ? ` · ${j.location}` : ""} · {j.seniority}
-                          </p>
-                          <p className="text-sm text-slate-600 mt-2 line-clamp-2">
-                            {j.description}
-                          </p>
+                      <div key={j.id} className="px-5 py-5 sm:px-6">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-base font-bold text-[#1e3456]">{j.title}</p>
+                              {j.hasApplied ? (
+                                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                                  Postulado
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="mt-2 text-[12px] text-slate-400">
+                              {(j.companyName ?? "Empresa")}
+                              {j.location ? ` · ${j.location}` : ""}
+                              {` · ${j.seniority}`}
+                              {` · ${j.employmentType}`}
+                            </p>
+                            <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-600">
+                              {j.description}
+                            </p>
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              <span className="rounded-full border border-[#dde7f5] bg-[#f7faff] px-3 py-1.5 text-xs font-semibold text-[#294266]">
+                                {formatSalary(j.salaryMin, j.salaryMax)}
+                              </span>
+                              <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-500">
+                                Publicado {timeAgo(j.createdAt)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="shrink-0">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={j.hasApplied ? "secondary" : "primary"}
+                              className="rounded-full px-5"
+                              disabled={j.hasApplied}
+                              onClick={() => {
+                                setApplyError(null);
+                                setCoverLetter("");
+                                setApplyModal({ jobId: j.id, title: j.title, companyName: j.companyName });
+                              }}
+                            >
+                              {j.hasApplied ? "Aplicación enviada" : "Quiero aplicar"}
+                            </Button>
+                          </div>
                         </div>
-                        <div className="shrink-0 flex items-center gap-2">
-                          {j.hasApplied ? (
-                            <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-200">
-                              Postulado
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="grid grid-cols-1 gap-8 xl:grid-cols-2">
+              <div className="rounded-[2rem] border border-white/80 bg-white p-6 shadow-sm sm:p-7">
+                <div className="mb-6 flex items-end justify-between gap-4">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#5d7ba6]">Impulso con IA</p>
+                    <h2 className="mt-2 text-xl font-bold tracking-tight text-[#1e3456]">
+                      Sesiones recientes
+                    </h2>
+                  </div>
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-[#294266] hover:underline"
+                    onClick={() => navigate(routes.chat)}
+                  >
+                    Abrir chat
+                  </button>
+                </div>
+
+                <div className="overflow-hidden rounded-[1.5rem] border border-slate-100 bg-slate-50/40">
+                  {recentSessions.length === 0 ? (
+                    <div className="p-6">
+                      <p className="text-sm text-slate-500">
+                        Aún no tienes sesiones. Ve a Chat o Simulación de entrevistas para crear una.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-100">
+                      {recentSessions.map((s) => (
+                        <div key={s.id} className="px-5 py-4 sm:px-6">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-[#1e3456]">{s.title}</p>
+                              <p className="mt-1 text-[11px] text-slate-400">
+                                {s.kind === "interview" ? "Entrevista" : "Chat"} · {s.model}
+                              </p>
+                            </div>
+                            <span className="whitespace-nowrap text-[11px] text-slate-400">
+                              {timeAgo(s.updatedAt)}
                             </span>
-                          ) : null}
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={j.hasApplied ? "secondary" : "primary"}
-                            disabled={j.hasApplied}
-                            onClick={() => {
-                              setApplyError(null);
-                              setCoverLetter("");
-                              setApplyModal({ jobId: j.id, title: j.title, companyName: j.companyName });
-                            }}
-                          >
-                            {j.hasApplied ? "Enviado" : "Postular"}
-                          </Button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </section>
-
-            <section>
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-[#1e3456] tracking-tight">
-                  Sesiones IA Recientes
-                </h2>
-                <button
-                  type="button"
-                  className="text-xs font-semibold text-[#294266] hover:underline"
-                  onClick={() => navigate(routes.chat)}
-                >
-                  Ir al chat
-                </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                {recentSessions.length === 0 ? (
-                  <div className="p-6">
-                    <p className="text-sm text-slate-500">
-                      Aún no tienes sesiones. Ve a Chat o Simulación de entrevistas para crear una.
-                    </p>
+              <div className="rounded-[2rem] border border-white/80 bg-white p-6 shadow-sm sm:p-7">
+                <div className="mb-6 flex items-end justify-between gap-4">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#5d7ba6]">Tus documentos</p>
+                    <h2 className="mt-2 text-xl font-bold tracking-tight text-[#1e3456]">
+                      CVs recientes
+                    </h2>
                   </div>
-                ) : (
-                  <div className="divide-y divide-slate-100">
-                    {recentSessions.map((s) => (
-                      <div key={s.id} className="px-6 py-4 flex items-center justify-between gap-4">
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-[#1e3456] truncate">{s.title}</p>
-                          <p className="text-[11px] text-slate-400 mt-1">
-                            {s.kind === "interview" ? "Entrevista" : "Chat"} · {s.model}
-                          </p>
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-[#294266] hover:underline"
+                    onClick={() => navigate(routes.cvBuilder)}
+                  >
+                    Ir al CV
+                  </button>
+                </div>
+
+                <div className="overflow-hidden rounded-[1.5rem] border border-slate-100 bg-slate-50/40">
+                  {recentCvs.length === 0 ? (
+                    <div className="p-6">
+                      <p className="text-sm text-slate-500">Aún no tienes CVs. Crea uno para empezar.</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-100">
+                      {recentCvs.map((cv) => (
+                        <div key={cv.id} className="px-5 py-4 sm:px-6">
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-[#1e3456]">{cv.title}</p>
+                              <p className="mt-1 text-[11px] text-slate-400">Actualizado {timeAgo(cv.updatedAt)}</p>
+                            </div>
+                            <button
+                              type="button"
+                              className="whitespace-nowrap text-xs font-bold text-[#294266] transition-colors hover:text-blue-800"
+                              onClick={() => navigate(routes.cvBuilder)}
+                            >
+                              Continuar
+                            </button>
+                          </div>
                         </div>
-                        <span className="text-[11px] text-slate-400 whitespace-nowrap">
-                          {timeAgo(s.updatedAt)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </section>
-
-            <section>
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-[#1e3456] tracking-tight">
-                  CVs Recientes
-                </h2>
-                <button
-                  type="button"
-                  className="text-xs font-semibold text-[#294266] hover:underline"
-                  onClick={() => navigate(routes.cvBuilder)}
-                >
-                  Ir al CV
-                </button>
-              </div>
-
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                {recentCvs.length === 0 ? (
-                  <div className="p-6">
-                    <p className="text-sm text-slate-500">Aún no tienes CVs. Crea uno para empezar.</p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-slate-100">
-                    {recentCvs.map((cv) => (
-                      <div key={cv.id} className="px-6 py-4 flex items-center justify-between gap-4">
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-[#1e3456] truncate">{cv.title}</p>
-                          <p className="text-[11px] text-slate-400 mt-1">Actualizado {timeAgo(cv.updatedAt)}</p>
-                        </div>
-                        <button
-                          type="button"
-                          className="text-xs font-bold text-[#294266] hover:text-blue-800 transition-colors whitespace-nowrap"
-                          onClick={() => navigate(routes.cvBuilder)}
-                        >
-                          Ver
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </section>
           </div>
 
-          <div className="xl:col-span-1">
-            <div className="bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-slate-100 h-full flex flex-col">
-              <div className="flex items-center justify-between gap-4 mb-8">
-                <h2 className="text-lg font-bold text-[#1e3456]">Actividad Reciente</h2>
-                <button
-                  type="button"
-                  onClick={logout}
-                  className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors"
-                >
-                  Cerrar sesión
-                </button>
+          <aside className="space-y-8">
+            <section className="rounded-[2rem] border border-white/80 bg-white p-6 shadow-sm sm:p-7">
+              <div className="mb-6">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#5d7ba6]">Radar profesional</p>
+                <h2 className="mt-2 text-xl font-bold tracking-tight text-[#1e3456]">
+                  Actividad reciente
+                </h2>
               </div>
 
-              <div className="space-y-8 flex-1">
-                {activity.map((a, idx) => (
-                  <div key={`${a.text}-${idx}`} className="flex gap-4">
-                    <div
-                      className={[
-                        "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
-                        a.tone === "blue"
-                          ? "bg-blue-50 text-[#294266]"
-                          : a.tone === "emerald"
-                            ? "bg-emerald-50 text-emerald-600"
-                            : a.tone === "purple"
-                              ? "bg-purple-50 text-purple-500"
-                              : "bg-slate-100 text-slate-500",
-                      ].join(" ")}
-                    >
-                      {a.icon}
-                    </div>
-                    <div>
-                      <p className="text-sm text-[#1e3456] font-medium leading-tight mb-1">{a.text}</p>
-                      <p className="text-[10px] text-slate-400">{a.time}</p>
-                    </div>
+              <div className="space-y-5">
+                {activity.length === 0 ? (
+                  <div className="rounded-2xl border border-slate-100 bg-slate-50/60 px-4 py-5 text-sm text-slate-500">
+                    Cuando empieces a crear CVs, usar IA o actualizar tu perfil, verás aquí tus avances.
                   </div>
+                ) : (
+                  activity.map((a, idx) => (
+                    <div key={`${a.text}-${idx}`} className="flex gap-4">
+                      <div
+                        className={[
+                          "mt-0.5 flex h-10 w-10 items-center justify-center rounded-2xl shrink-0",
+                          a.tone === "blue"
+                            ? "bg-blue-50 text-[#294266]"
+                            : a.tone === "emerald"
+                              ? "bg-emerald-50 text-emerald-600"
+                              : a.tone === "purple"
+                                ? "bg-purple-50 text-purple-500"
+                                : "bg-slate-100 text-slate-500",
+                        ].join(" ")}
+                      >
+                        {a.icon}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold leading-6 text-[#1e3456]">{a.text}</p>
+                        <p className="mt-1 text-[11px] text-slate-400">{a.time}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
+
+            <section className="overflow-hidden rounded-[2rem] border border-[#dbe7f8] bg-[linear-gradient(180deg,#f7faff,#ffffff)] p-6 shadow-sm sm:p-7">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#5d7ba6]">Próximo movimiento</p>
+              <h3 className="mt-2 text-2xl font-bold tracking-tight text-[#1e3456]">
+                Haz que tu perfil se vuelva más visible y más convincente.
+              </h3>
+              <p className="mt-4 text-sm leading-7 text-slate-500">
+                Usa el constructor de CV, practica entrevistas y fortalece tu historia profesional para aumentar tus posibilidades de respuesta.
+              </p>
+
+              <div className="mt-6 space-y-3">
+                {[
+                  { label: "Perfeccionar CV con IA", action: () => navigate(routes.cvBuilder) },
+                  { label: "Entrenar entrevista", action: () => navigate(routes.interview) },
+                  { label: "Actualizar perfil", action: () => navigate(routes.onboarding) },
+                ].map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={item.action}
+                    className="flex w-full items-center justify-between rounded-2xl border border-white bg-white/90 px-4 py-3 text-left shadow-sm transition-colors hover:border-[#294266]/20"
+                  >
+                    <span className="text-sm font-semibold text-[#1e3456]">{item.label}</span>
+                    <span className="text-[#294266]">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M5 12h14" />
+                        <path d="m12 5 7 7-7 7" />
+                      </svg>
+                    </span>
+                  </button>
                 ))}
               </div>
-
-              <div className="bg-[#f0f4f8] rounded-xl p-5 mt-8 border border-blue-100/50">
-                <h4 className="text-xs font-bold text-[#1e3456] mb-2">Consejo Pro</h4>
-                <p className="text-[11px] text-slate-500 leading-relaxed mb-3">
-                  Las empresas que responden en menos de 24 horas a los candidatos de alto match
-                  tienen 4x más probabilidades de asegurar la contratación.
-                </p>
-                <button type="button" className="text-[11px] font-bold text-[#294266] hover:underline">
-                  Aprender Más
-                </button>
-              </div>
-            </div>
-          </div>
+            </section>
+          </aside>
         </div>
       </main>
 
-      <footer className="border-t border-slate-200 bg-[#f8fafc] mt-auto">
-        <div className="max-w-[1400px] mx-auto px-6 py-8 flex flex-col md:flex-row items-center justify-between gap-4">
+      <footer className="mt-auto border-t border-slate-200 bg-[#f8fafc]/80 backdrop-blur">
+        <div className="mx-auto flex max-w-[1400px] flex-col items-center justify-between gap-4 px-6 py-8 md:flex-row">
           <div>
-            <span className="font-bold text-[#1e3456] text-lg tracking-tight block mb-1">FirsTep</span>
+            <span className="mb-1 block text-lg font-bold tracking-tight text-[#1e3456]">FirsTep</span>
             <p className="text-[11px] text-slate-400">
-              © 2024 FirsTep Technologies. Todos los derechos reservados.
+              © 2024 FirsTep Technologies. Impulsando carreras con IA y mejor contexto profesional.
             </p>
           </div>
 

@@ -100,6 +100,7 @@ export class AuthService {
 
     const supabaseUserId = String(claims?.sub ?? "");
     const email = typeof claims?.email === "string" ? claims.email : "";
+    const oauthDisplayName = readOAuthDisplayName(claims);
     if (!supabaseUserId || !email) {
       throw Errors.unauthorized("Token inválido.");
     }
@@ -125,6 +126,15 @@ export class AuthService {
       );
     }
 
+    if (user && params.role === "talento" && oauthDisplayName) {
+      const currentProfile = await this.talentProfiles.get(user.id);
+      const currentName = normalizeDisplayName(currentProfile?.fullName ?? null);
+      const emailFallback = normalizeDisplayName(email.split("@")[0] ?? null);
+      if (!currentName || currentName === emailFallback) {
+        await this.talentProfiles.upsert(user.id, { fullName: oauthDisplayName });
+      }
+    }
+
     if (!user) {
       try {
         const passwordHash = await bcrypt.hash(crypto.randomUUID(), this.env.bcryptRounds);
@@ -136,7 +146,7 @@ export class AuthService {
         });
 
         if (params.role === "talento") {
-          await this.talentProfiles.upsert(user.id, { fullName: email.split("@")[0] });
+          await this.talentProfiles.upsert(user.id, { fullName: oauthDisplayName ?? email.split("@")[0] });
         } else {
           await this.companyProfiles.upsert(user.id, { companyName: email.split("@")[0] });
         }
@@ -148,6 +158,25 @@ export class AuthService {
     const authUser: AuthUser = { id: user.id, email: user.email, role: user.role };
     return { user: authUser, accessToken: signAccessToken(this.env, authUser) } satisfies AuthResult;
   }
+}
+
+function normalizeDisplayName(value: unknown) {
+  if (typeof value !== "string") return "";
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function readOAuthDisplayName(claims: any) {
+  const candidates = [
+    claims?.name,
+    claims?.user_metadata?.full_name,
+    claims?.user_metadata?.name,
+    claims?.user_metadata?.display_name,
+  ];
+  for (const candidate of candidates) {
+    const normalized = normalizeDisplayName(candidate);
+    if (normalized) return normalized;
+  }
+  return null;
 }
 
 type Jwks = { keys?: any[] };

@@ -130,7 +130,7 @@ export function loadEnv(): Env {
   const jwtSecret = process.env.JWT_SECRET ?? (nodeEnv === "development" ? "dev-secret-change-me" : "");
   if (!jwtSecret) throw new Error("Falta JWT_SECRET.");
 
-  const jwtExpiresIn = process.env.JWT_EXPIRES_IN ?? "15m";
+  const jwtExpiresIn = process.env.JWT_EXPIRES_IN ?? "12h";
   const bcryptRounds = readNumber("BCRYPT_ROUNDS", 10);
   const corsOrigin = readOptional("CORS_ORIGIN");
 

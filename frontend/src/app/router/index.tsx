@@ -18,6 +18,7 @@ import { LoginCompanyPage } from "@/pages/login-company";
 import { LoginPortalPage } from "@/pages/login-portal";
 import { LoginUserPage } from "@/pages/login-user";
 import { OnboardingUserPage } from "@/pages/onboarding-user";
+import { OpportunitiesUserPage } from "@/pages/opportunities-user";
 import { SignUpCompanyPage } from "@/pages/signup-company";
 import { SignUpTalentPage } from "@/pages/signup-talent";
 import { routes } from "@/shared/config/routes";
@@ -57,6 +58,14 @@ export function AppRouter() {
         element={
           <ProtectedRoute role="talento">
             <DashboardUserPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path={routes.opportunities}
+        element={
+          <ProtectedRoute role="talento">
+            <OpportunitiesUserPage />
           </ProtectedRoute>
         }
       />

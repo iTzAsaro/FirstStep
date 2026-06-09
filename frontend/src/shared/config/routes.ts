@@ -25,4 +25,5 @@ export const routes = {
   interview: "/entrevista",
   onboarding: "/onboarding",
   dashboard: "/dashboard",
+  opportunities: "/oportunidades",
 } as const;

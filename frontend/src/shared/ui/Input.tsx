@@ -5,6 +5,7 @@
 // ║ Creado:      20-05-2026                                              ║
 // ╚══════════════════════════════════════════════════════════════════════╝
 
+import { forwardRef } from "react";
 import type { InputHTMLAttributes, ReactNode } from "react";
 
 import { cn } from "@/shared/lib/cn";
@@ -17,7 +18,10 @@ type Props = InputHTMLAttributes<HTMLInputElement> & {
 /**
  * Input con soporte de iconos/slots en los laterales.
  */
-export function Input({ className, leftSlot, rightSlot, ...props }: Props) {
+export const Input = forwardRef<HTMLInputElement, Props>(function Input(
+  { className, leftSlot, rightSlot, ...props },
+  ref,
+) {
   return (
     <div className="relative">
       {leftSlot ? (
@@ -26,6 +30,7 @@ export function Input({ className, leftSlot, rightSlot, ...props }: Props) {
         </div>
       ) : null}
       <input
+        ref={ref}
         className={cn(
           "w-full bg-[#f3f6fc] text-slate-800 rounded-xl px-4 py-3.5 outline-none focus:ring-2 focus:ring-[#294266]/30 transition-all text-sm",
           leftSlot ? "pl-11" : null,
@@ -39,4 +44,4 @@ export function Input({ className, leftSlot, rightSlot, ...props }: Props) {
       ) : null}
     </div>
   );
-}
+});

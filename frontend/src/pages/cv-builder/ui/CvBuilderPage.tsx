@@ -61,6 +61,24 @@ function themeClasses(theme: CvTheme) {
   return { border: "border-slate-900", title: "text-slate-900" };
 }
 
+function themeDotClass(active: boolean, base: string) {
+  return [
+    "w-5 h-5 rounded-full transition-all cursor-pointer",
+    "hover:scale-110",
+    active ? "ring-2 ring-offset-2 ring-[#294266] border-2 border-white shadow-md" : "border-2 border-transparent opacity-80 hover:opacity-100",
+    base,
+  ].join(" ");
+}
+
+function splitTip(text: string) {
+  const marker = "Tip de Experto";
+  const idx = text.indexOf(marker);
+  if (idx === -1) return { main: text, tip: null as string | null };
+  const main = text.slice(0, idx).trim();
+  const tip = text.slice(idx).trim();
+  return { main, tip: tip || null };
+}
+
 /**
  * Página de generación/edición de CV basada en mock.
  */
@@ -230,6 +248,13 @@ export function CvBuilderPage() {
     return [];
   }, [flowStep]);
 
+  const flowMeta = useMemo(() => {
+    if (flowStep === 0) return { label: "Experiencia", progress: 33 };
+    if (flowStep === 1) return { label: "Optimización ATS", progress: 66 };
+    if (flowStep === 2) return { label: "Detalles finales", progress: 100 };
+    return { label: "Conversación", progress: 50 };
+  }, [flowStep]);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
@@ -350,13 +375,29 @@ export function CvBuilderPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setIsPreviewOpen(true)}
-            className="text-xs bg-slate-100 text-[#1e3456] px-3 py-1.5 rounded-lg font-semibold border border-slate-200"
-          >
-            Ver CV
-          </button>
+          <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 p-1">
+            <button
+              type="button"
+              onClick={() => setIsPreviewOpen(false)}
+              className={[
+                "px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors",
+                !isPreviewOpen ? "bg-white text-[#1e3456] shadow-sm" : "text-slate-500",
+              ].join(" ")}
+            >
+              Chat
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsPreviewOpen(true)}
+              className={[
+                "px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5",
+                isPreviewOpen ? "bg-white text-[#1e3456] shadow-sm" : "text-slate-500",
+              ].join(" ")}
+            >
+              CV
+              {isGeneratingCv ? <span className="inline-flex h-2 w-2 rounded-full bg-amber-500" /> : null}
+            </button>
+          </div>
           <button type="button" onClick={() => setIsSidebarOpen(true)} className="text-slate-600">
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -489,22 +530,35 @@ export function CvBuilderPage() {
               </div>
               <div>
                 <h2 className="font-bold text-[#1e3456] text-base leading-tight">Constructor de CV AI</h2>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
-                    Asistente en Línea
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    Asistente en línea
                   </span>
+                  <span className="inline-flex items-center gap-2 rounded-full border border-[#dbe7f8] bg-[#f7faff] px-2.5 py-1 text-[10px] font-semibold text-[#294266]">
+                    <span className="h-1.5 w-20 rounded-full bg-[#dbe7f8] overflow-hidden">
+                      <span className="block h-full bg-[linear-gradient(90deg,#294266,#5d85c4)]" style={{ width: `${flowMeta.progress}%` }} />
+                    </span>
+                    {flowMeta.label}
+                  </span>
+                  {isGeneratingCv ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-700">
+                      <span className="inline-flex h-3 w-3 animate-spin rounded-full border-2 border-amber-300 border-t-amber-600" />
+                      Actualizando vista previa
+                    </span>
+                  ) : null}
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="flex-1 p-6 overflow-y-auto bg-slate-50/50 space-y-6">
+          <div className="flex-1 overflow-y-auto bg-[linear-gradient(180deg,rgba(248,250,252,0.85),rgba(255,255,255,0.85))]">
+            <div className="p-6 space-y-5">
             {messages.map((m) => {
               if (m.sender === "user") {
                 return (
-                  <div key={m.id} className="flex gap-4 items-start max-w-2xl ml-auto justify-end">
-                    <div className="bg-[#294266] text-white rounded-2xl p-4 shadow-sm text-sm leading-relaxed">
+                  <div key={m.id} className="flex gap-3 items-start max-w-2xl ml-auto justify-end">
+                    <div className="bg-[linear-gradient(135deg,#1a2b44,#294266)] text-white rounded-2xl rounded-tr-md p-4 shadow-sm text-sm leading-relaxed border border-white/10">
                       {m.text}
                     </div>
                     <div className="w-8 h-8 rounded-lg bg-slate-300 flex items-center justify-center text-slate-700 shrink-0 mt-1 overflow-hidden">
@@ -513,8 +567,9 @@ export function CvBuilderPage() {
                   </div>
                 );
               }
+              const { main, tip } = splitTip(m.text);
               return (
-                <div key={m.id} className="flex gap-4 items-start max-w-2xl">
+                <div key={m.id} className="flex gap-3 items-start max-w-2xl">
                   <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shrink-0 mt-1">
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -530,15 +585,45 @@ export function CvBuilderPage() {
                       <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
                     </svg>
                   </div>
-                  <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-                    {m.text}
+                  <div className="min-w-0 flex-1 space-y-3">
+                    {main ? (
+                      <div className="bg-white border border-slate-100 rounded-2xl rounded-tl-md p-4 shadow-sm text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                        {main}
+                      </div>
+                    ) : null}
+                    {tip ? (
+                      <div className="rounded-2xl border border-[#dbe7f8] bg-[#f7faff] p-4 shadow-sm">
+                        <div className="flex items-start gap-3">
+                          <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-xl bg-white text-[#294266] border border-[#dbe7f8]">
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M12 2a7 7 0 0 0-4 12c.4.3.7.8.7 1.3V17a1 1 0 0 0 1 1h4.6a1 1 0 0 0 1-1v-1.7c0-.5.3-1 .7-1.3A7 7 0 0 0 12 2Z" />
+                              <path d="M9 21h6" />
+                            </svg>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold tracking-widest uppercase text-[#5d7ba6]">Tip ATS</p>
+                            <p className="mt-1 text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">{tip}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               );
             })}
 
             {isTyping ? (
-              <div className="flex gap-4 items-start max-w-2xl">
+              <div className="flex gap-3 items-start max-w-2xl">
                 <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shrink-0 mt-1">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -566,35 +651,45 @@ export function CvBuilderPage() {
             ) : null}
 
             {quickActions.length > 0 ? (
-              <div className="flex flex-wrap gap-2.5 ml-12">
-                {quickActions.map((q) => (
-                  <button
-                    key={q}
-                    type="button"
-                    onClick={() => sendMessage(q)}
-                    className="bg-white border border-slate-200 text-slate-600 hover:border-[#294266] hover:text-[#294266] px-4 py-2 rounded-full text-xs font-semibold shadow-sm transition-all"
-                  >
-                    {q}
-                  </button>
-                ))}
+              <div className="ml-11 -mr-6 overflow-x-auto pr-6">
+                <div className="flex w-max gap-2.5 py-1">
+                  {quickActions.map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => sendMessage(q)}
+                      className="bg-white border border-slate-200 text-slate-600 hover:border-[#294266] hover:text-[#294266] px-4 py-2 rounded-full text-xs font-semibold shadow-sm transition-all whitespace-nowrap"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : null}
             <div ref={bottomRef} />
+            </div>
           </div>
 
           <div className="p-4 bg-white border-t border-slate-200 shrink-0">
-            <form onSubmit={onSubmit} className="flex items-center gap-3 bg-[#f1f5f9] rounded-2xl p-2.5">
-              <input
-                type="text"
+            <form onSubmit={onSubmit} className="flex items-end gap-3 bg-[#f1f5f9] rounded-2xl p-3">
+              <textarea
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Escribe aquí tu experiencia profesional..."
-                className="bg-transparent flex-1 text-sm text-slate-800 outline-none placeholder:text-slate-400 px-2"
+                placeholder="Escribe aquí tu experiencia profesional… (Enter para enviar, Shift+Enter para salto de línea)"
+                className="bg-transparent flex-1 text-sm text-slate-800 outline-none placeholder:text-slate-400 px-1 resize-none min-h-[44px] max-h-40 leading-6"
                 autoComplete="off"
+                rows={1}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage(chatInput);
+                  }
+                }}
               />
               <button
                 type="submit"
-                className="bg-[#294266] text-white px-5 py-2.5 rounded-xl text-xs font-semibold hover:bg-[#1a2b44] transition-all flex items-center gap-2 shadow-sm"
+                disabled={!chatInput.trim()}
+                className="bg-[#294266] disabled:bg-slate-300 disabled:text-slate-500 text-white px-5 py-2.5 rounded-xl text-xs font-semibold hover:bg-[#1a2b44] transition-all flex items-center gap-2 shadow-sm"
               >
                 <span>Enviar</span>
                 <svg
@@ -613,6 +708,10 @@ export function CvBuilderPage() {
                 </svg>
               </button>
             </form>
+            <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
+              <span>{isGeneratingCv ? "Actualizando vista previa con IA…" : "Consejo: añade resultados medibles (%, $, tiempo)."}</span>
+              <span className="hidden sm:inline">{chatInput.trim().length ? `${chatInput.trim().length} caracteres` : ""}</span>
+            </div>
           </div>
         </section>
 
@@ -629,6 +728,12 @@ export function CvBuilderPage() {
                 <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
                 Vista Previa
               </span>
+              {isGeneratingCv ? (
+                <span className="ml-2 inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-700">
+                  <span className="inline-flex h-3 w-3 animate-spin rounded-full border-2 border-amber-300 border-t-amber-600" />
+                  Generando
+                </span>
+              ) : null}
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -677,7 +782,7 @@ export function CvBuilderPage() {
           </div>
 
           <div className="flex-1 p-6 overflow-y-auto flex justify-center items-start">
-            <div className="w-full bg-white rounded-xl shadow-[0_4px_25px_rgba(0,0,0,0.06)] p-8 text-xs text-slate-700 min-h-[600px] flex flex-col justify-between transition-colors duration-300 print-cv-sheet">
+            <div className="w-full bg-white rounded-2xl shadow-[0_18px_60px_-30px_rgba(15,23,42,0.45)] p-8 text-xs text-slate-700 min-h-[600px] flex flex-col justify-between transition-colors duration-300 print-cv-sheet border border-slate-100">
               <div>
                 <div className={["border-b-2 pb-4 mb-5", colors.border].join(" ")}>
                   <h3 className="text-2xl font-bold text-slate-900 tracking-tight">{cvName}</h3>
@@ -796,25 +901,25 @@ export function CvBuilderPage() {
                 <button
                   type="button"
                   onClick={() => setTheme("slate")}
-                  className="w-5 h-5 rounded-full bg-slate-900 border-2 border-slate-200 hover:scale-110 transition-transform cursor-pointer"
+                  className={themeDotClass(theme === "slate", "bg-slate-900")}
                   title="Clásico Oscuro"
                 />
                 <button
                   type="button"
                   onClick={() => setTheme("blue")}
-                  className="w-5 h-5 rounded-full bg-blue-600 border-2 border-transparent hover:scale-110 transition-transform cursor-pointer"
+                  className={themeDotClass(theme === "blue", "bg-blue-600")}
                   title="Moderno Azul"
                 />
                 <button
                   type="button"
                   onClick={() => setTheme("emerald")}
-                  className="w-5 h-5 rounded-full bg-emerald-600 border-2 border-transparent hover:scale-110 transition-transform cursor-pointer"
+                  className={themeDotClass(theme === "emerald", "bg-emerald-600")}
                   title="Elegante Esmeralda"
                 />
                 <button
                   type="button"
                   onClick={() => setTheme("indigo")}
-                  className="w-5 h-5 rounded-full bg-indigo-600 border-2 border-transparent hover:scale-110 transition-transform cursor-pointer"
+                  className={themeDotClass(theme === "indigo", "bg-indigo-600")}
                   title="Royal Indigo"
                 />
               </div>

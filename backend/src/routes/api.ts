@@ -11,6 +11,7 @@ import type { AppContext } from "../app";
 
 import { createAiRouter } from "./ai";
 import { createAuthRouter } from "./auth";
+import { createCatalogRouter } from "./catalog";
 import { createCompanyRouter } from "./company";
 import { createCvRouter } from "./cv";
 import { createTalentRouter } from "./talent";
@@ -23,6 +24,7 @@ export function createApiRouter(ctx: AppContext) {
   const router = Router();
 
   router.use("/auth", createAuthRouter(ctx));
+  router.use("/catalog", createCatalogRouter(ctx));
   router.use("/talent", createTalentRouter(ctx));
   router.use("/company", createCompanyRouter(ctx));
   router.use("/cv", createCvRouter(ctx));

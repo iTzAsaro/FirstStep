@@ -23,48 +23,151 @@ const DEFAULT_CAREERS = [
   "Arquitectura Cloud",
 ];
 
-/**
- * Renderiza el flujo de onboarding para completar información del perfil.
- * Al finalizar, marca la sesión como "onboarded" y redirige al dashboard.
- */
+const GOOGLE_MAPS_API_KEY = ((import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined) ?? "").trim();
+
+type CityAutocompleteStatus = "manual" | "loading" | "ready" | "error";
+
+type GoogleMapsWindow = Window & {
+  google?: any;
+  __firststepGoogleMapsPromise?: Promise<void>;
+};
+
+function loadGoogleMapsPlacesApi(apiKey: string) {
+  const win = window as GoogleMapsWindow;
+  if (win.google?.maps?.places) return Promise.resolve();
+  if (win.__firststepGoogleMapsPromise) return win.__firststepGoogleMapsPromise;
+
+  win.__firststepGoogleMapsPromise = new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>('script[data-google-maps-loader="firststep"]');
+    if (existing) {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error("No se pudo cargar Google Maps.")), { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places`;
+    script.async = true;
+    script.defer = true;
+    script.dataset.googleMapsLoader = "firststep";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("No se pudo cargar Google Maps."));
+    document.head.appendChild(script);
+  });
+
+  return win.__firststepGoogleMapsPromise;
+}
+
+function readAddressPart(place: any, type: string, useShortName = false) {
+  const component = Array.isArray(place?.address_components)
+    ? place.address_components.find((entry: any) => Array.isArray(entry?.types) && entry.types.includes(type))
+    : null;
+  if (!component) return "";
+  const value = useShortName ? component.short_name : component.long_name;
+  return typeof value === "string" ? value : "";
+}
+
+function formatSelectedCity(place: any) {
+  const locality =
+    readAddressPart(place, "locality") ||
+    readAddressPart(place, "postal_town") ||
+    readAddressPart(place, "administrative_area_level_2");
+  const region = readAddressPart(place, "administrative_area_level_1", true);
+  const country = readAddressPart(place, "country", true);
+
+  if (locality && region) return `${locality}, ${region}`;
+  if (locality && country) return `${locality}, ${country}`;
+  if (locality) return locality;
+  if (typeof place?.formatted_address === "string" && place.formatted_address.trim()) return place.formatted_address.trim();
+  if (typeof place?.name === "string" && place.name.trim()) return place.name.trim();
+  return "";
+}
+
 export function OnboardingUserPage() {
   const session = useSession();
   const { complete, isLoading, error, clearError } = useCompleteOnboarding();
 
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const cityInputRef = useRef<HTMLInputElement | null>(null);
 
   const [avatarSrc, setAvatarSrc] = useState("https://i.pravatar.cc/300?img=11");
   const [fullName, setFullName] = useState(session.userName ?? "");
+  const [userEmail, setUserEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [city, setCity] = useState("");
   const [university, setUniversity] = useState("");
   const [degree, setDegree] = useState("");
   const [gradYear, setGradYear] = useState("");
-  const [gpa, setGpa] = useState("");
-
   const [careerQuery, setCareerQuery] = useState("");
+  const [careerOptions, setCareerOptions] = useState<string[]>(DEFAULT_CAREERS);
   const [selectedCareers, setSelectedCareers] = useState<string[]>([
     "Desarrollo Frontend",
     "Análisis de Datos",
     "Ciberseguridad",
   ]);
-
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [cityAutocompleteStatus, setCityAutocompleteStatus] = useState<CityAutocompleteStatus>(
+    GOOGLE_MAPS_API_KEY ? "loading" : "manual",
+  );
+
+  const clearFieldError = (field: string) => {
+    setFieldErrors((prev) => {
+      const { [field]: _removed, ...rest } = prev;
+      return rest;
+    });
+  };
 
   const filteredCareers = useMemo(() => {
     const q = careerQuery.trim().toLowerCase();
-    if (!q) return DEFAULT_CAREERS;
-    return DEFAULT_CAREERS.filter((c) => c.toLowerCase().includes(q));
-  }, [careerQuery]);
+    if (!q) return careerOptions;
+    return careerOptions.filter((career) => career.toLowerCase().includes(q));
+  }, [careerOptions, careerQuery]);
 
-  const isProfileComplete = useMemo(() => {
-    const name = fullName.trim();
-    const cityValue = city.trim();
-    const uni = university.trim();
-    const deg = degree.trim();
-    const year = gradYear.trim();
-    return Boolean(name && cityValue && uni && deg && /^\d{4}$/.test(year) && selectedCareers.length >= 3);
-  }, [city, degree, fullName, gradYear, selectedCareers.length, university]);
+  const cityAutocompleteMeta = useMemo(() => {
+    if (cityAutocompleteStatus === "ready") {
+      return "Elige una sugerencia para guardar tu ubicación de forma clara y consistente.";
+    }
+    if (cityAutocompleteStatus === "loading") {
+      return "Cargando sugerencias de ciudad para agilizar este paso.";
+    }
+    if (cityAutocompleteStatus === "error") {
+      return "Puedes escribir tu ciudad manualmente mientras las sugerencias no estén disponibles.";
+    }
+    return "Escribe tu ciudad actual para personalizar recomendaciones y oportunidades cercanas.";
+  }, [cityAutocompleteStatus]);
+
+  const requiredChecks = useMemo(
+    () => ({
+      fullName: Boolean(fullName.trim()),
+      city: Boolean(city.trim()),
+      university: Boolean(university.trim()),
+      degree: Boolean(degree.trim()),
+      gradYear: /^\d{4}$/.test(gradYear.trim()),
+      careerInterests: selectedCareers.length >= 3,
+    }),
+    [city, degree, fullName, gradYear, selectedCareers.length, university],
+  );
+
+  const completionPercentage = useMemo(() => {
+    const completed = Object.values(requiredChecks).filter(Boolean).length;
+    return Math.round((completed / Object.keys(requiredChecks).length) * 100);
+  }, [requiredChecks]);
+
+  const canFinish = useMemo(() => Object.values(requiredChecks).every(Boolean), [requiredChecks]);
+
+  const selectedCareerPreview = useMemo(() => {
+    if (!selectedCareers.length) return "Aun no has seleccionado intereses.";
+    return selectedCareers.slice(0, 3).join(" · ");
+  }, [selectedCareers]);
+
+  const sectionStatuses = useMemo(
+    () => [
+      { label: "Datos de contacto", done: requiredChecks.fullName && requiredChecks.city },
+      { label: "Formacion academica", done: requiredChecks.university && requiredChecks.degree && requiredChecks.gradYear },
+      { label: "Intereses profesionales", done: requiredChecks.careerInterests },
+    ],
+    [requiredChecks],
+  );
 
   useEffect(() => {
     let alive = true;
@@ -87,11 +190,10 @@ export function OnboardingUserPage() {
         setUniversity(typeof profile.university === "string" ? profile.university : "");
         setDegree(typeof profile.degree === "string" ? profile.degree : "");
         setGradYear(profile.gradYear ? String(profile.gradYear) : "");
-        setGpa(typeof profile.gpa === "string" ? profile.gpa : "");
         if (Array.isArray(profile.careerInterests) && profile.careerInterests.length) {
-          setSelectedCareers(profile.careerInterests.filter((v: any) => typeof v === "string"));
+          setSelectedCareers(profile.careerInterests.filter((value: unknown) => typeof value === "string"));
         }
-      } catch { }
+      } catch {}
     })();
 
     return () => {
@@ -99,55 +201,110 @@ export function OnboardingUserPage() {
     };
   }, [session.userName]);
 
-  const canFinish = useMemo(() => {
-    const name = fullName.trim();
-    const cityValue = city.trim();
-    const uni = university.trim();
-    const deg = degree.trim();
-    const year = gradYear.trim();
-    return Boolean(
-      name &&
-      cityValue &&
-      uni &&
-      deg &&
-      /^\d{4}$/.test(year) &&
-      selectedCareers.length >= 3,
-    );
-  }, [city, degree, fullName, gradYear, selectedCareers.length, university]);
+  useEffect(() => {
+    let alive = true;
+    const token = localStorage.getItem("firststep.api.accessToken") ?? "";
+    if (!token) return;
+    (async () => {
+      try {
+        const res = await fetch("/api/auth/me", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const out = (await res.json()) as any;
+        const emailValue = typeof out?.user?.email === "string" ? out.user.email.trim() : "";
+        if (!alive) return;
+        if (emailValue) setUserEmail(emailValue);
+      } catch {}
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/catalog/career-interests");
+        if (!res.ok) return;
+        const out = (await res.json()) as any;
+        const labels = Array.isArray(out?.items)
+          ? out.items
+              .map((item: any) => (typeof item?.label === "string" ? item.label.trim() : ""))
+              .filter(Boolean)
+          : [];
+        if (!alive) return;
+        if (labels.length) setCareerOptions(labels);
+      } catch {}
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!GOOGLE_MAPS_API_KEY) {
+      setCityAutocompleteStatus("manual");
+      return;
+    }
+    if (!cityInputRef.current) return;
+
+    let cancelled = false;
+    let placeChangedListener: { remove?: () => void } | null = null;
+    setCityAutocompleteStatus("loading");
+
+    void loadGoogleMapsPlacesApi(GOOGLE_MAPS_API_KEY)
+      .then(() => {
+        if (cancelled || !cityInputRef.current) return;
+        const googleMaps = (window as GoogleMapsWindow).google;
+        if (!googleMaps?.maps?.places?.Autocomplete) throw new Error("Google Places no esta disponible.");
+
+        const autocomplete = new googleMaps.maps.places.Autocomplete(cityInputRef.current, {
+          types: ["(cities)"],
+          fields: ["address_components", "formatted_address", "name"],
+        });
+
+        placeChangedListener = autocomplete.addListener("place_changed", () => {
+          const nextCity = formatSelectedCity(autocomplete.getPlace());
+          if (!nextCity) return;
+          clearError();
+          setCity(nextCity);
+          clearFieldError("city");
+        });
+
+        setCityAutocompleteStatus("ready");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCityAutocompleteStatus("error");
+      });
+
+    return () => {
+      cancelled = true;
+      placeChangedListener?.remove?.();
+    };
+  }, [clearError]);
 
   const validate = () => {
     const next: Record<string, string> = {};
 
-    const name = fullName.trim();
-    if (!name) next.fullName = "Nombre completo es requerido.";
-
-    const cityValue = city.trim();
-    if (!cityValue) next.city = "Ciudad actual es requerida.";
-
-    const uni = university.trim();
-    if (!uni) next.university = "Universidad / Instituto es requerido.";
-
-    const deg = degree.trim();
-    if (!deg) next.degree = "Programa de grado es requerido.";
+    if (!fullName.trim()) next.fullName = "Nombre completo es requerido.";
+    if (!city.trim()) next.city = "Ciudad actual es requerida.";
+    if (!university.trim()) next.university = "Universidad / Instituto es requerido.";
+    if (!degree.trim()) next.degree = "Programa de grado es requerido.";
 
     const year = gradYear.trim();
     if (!/^\d{4}$/.test(year)) {
       next.gradYear = "Año de graduación debe ser un año de 4 dígitos.";
     } else {
-      const y = Number(year);
-      if (y < 1900 || y > 2100) next.gradYear = "Año de graduación es inválido.";
+      const numericYear = Number(year);
+      if (numericYear < 1900 || numericYear > 2100) next.gradYear = "Año de graduación es inválido.";
     }
 
-    const phoneValue = phone.trim();
-    if (phoneValue) {
-      const digits = phoneValue.replace(/[^\d]/g, "");
-      if (digits.length < 7 || digits.length > 15) next.phone = "Número de teléfono es inválido.";
-    }
-
-    const gpaValue = gpa.trim();
-    if (gpaValue) {
-      const n = Number(gpaValue);
-      if (!Number.isFinite(n) || n < 0 || n > 5) next.gpa = "Promedio es inválido.";
+    const phoneDigits = phone.trim().replace(/[^\d]/g, "");
+    if (phone.trim() && (phoneDigits.length < 7 || phoneDigits.length > 15)) {
+      next.phone = "Número de teléfono es inválido.";
     }
 
     if (selectedCareers.length < 3) next.careerInterests = "Selecciona al menos 3 opciones.";
@@ -157,62 +314,42 @@ export function OnboardingUserPage() {
   };
 
   return (
-    <div className="min-h-screen pb-12 flex flex-col items-center bg-[#f8fafc] text-slate-800">
-      <div className="w-full max-w-6xl mx-auto px-4 mt-6">
-        <div className="bg-white rounded-2xl p-4 px-6 flex justify-between items-center shadow-sm">
-          <span className="font-bold text-[#294266] text-lg tracking-tight">GradPath</span>
-          <button type="button" className="text-slate-400 hover:text-slate-600 transition-colors">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-              <path d="M12 17h.01" />
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      <div className="w-full max-w-3xl mx-auto px-4 mt-12 mb-10 text-center">
-        <span className="inline-block bg-[#e5edfa] text-[#294266] text-[10px] font-bold tracking-widest uppercase px-3 py-1.5 rounded-full mb-6">
-          Incorporación
-        </span>
-
-        <h1 className="text-4xl md:text-5xl font-bold text-[#1e3456] mb-5 tracking-tight">
-          Diseña tu futuro.
-        </h1>
-
-        <p className="text-slate-500 text-sm md:text-base max-w-2xl mx-auto leading-relaxed">
-          Bienvenido a FirsTep por GradPath. Tu viaje profesional es único, y comienza con un perfil
-          que refleja tu verdadero potencial. Completa los detalles a continuación para desbloquear
-          oportunidades personalizadas.
-        </p>
-      </div>
-
-      <div className="w-full max-w-5xl mx-auto px-4 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8">
-        <div className="lg:col-span-4">
-          <div className="bg-white rounded-[2rem] p-8 flex flex-col items-center text-center shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04)] sticky top-6">
-            <div className="relative mb-6">
-              <div className="w-32 h-32 rounded-full border-4 border-[#f1f5f9] overflow-hidden bg-slate-100">
-                <img src={avatarSrc} alt="" className="w-full h-full object-cover" />
+    <div className="min-h-screen bg-[linear-gradient(180deg,#eef4fb_0%,#f8fafc_28%,#f8fafc_100%)] text-slate-800 pb-16">
+      <div className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
+        <div className="rounded-3xl border border-white/70 bg-white/85 shadow-[0_24px_80px_-28px_rgba(30,52,86,0.22)] backdrop-blur">
+          <div className="flex flex-col gap-6 border-b border-slate-100 px-5 py-5 sm:px-8 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-4">
+              <div className="rounded-2xl bg-[#e8f0fb] px-4 py-3 text-sm font-bold tracking-tight text-[#1e3456]">
+                GradPath
               </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[#5d7ba6]">Incorporacion</p>
+                <p className="mt-1 text-sm text-slate-500">Crea un perfil con el formato que esperan los reclutadores.</p>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="rounded-2xl border border-[#dbe7f8] bg-[#f7faff] px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#5d7ba6]">Perfil completado</p>
+                <div className="mt-2 flex items-center gap-3">
+                  <div className="h-2 w-36 overflow-hidden rounded-full bg-[#dbe7f8]">
+                    <div
+                      className="h-full rounded-full bg-[linear-gradient(90deg,#294266,#5d85c4)] transition-all"
+                      style={{ width: `${completionPercentage}%` }}
+                    />
+                  </div>
+                  <span className="text-sm font-bold text-[#1e3456]">{completionPercentage}%</span>
+                </div>
+              </div>
+
               <button
                 type="button"
-                onClick={() => fileRef.current?.click()}
-                className="absolute bottom-1 right-1 bg-[#294266] text-white p-2 rounded-full border-2 border-white hover:bg-[#1a2b44] transition-colors shadow-md"
+                className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-400 transition-colors hover:text-slate-600"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  width="14"
-                  height="14"
+                  width="18"
+                  height="18"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -220,402 +357,702 @@ export function OnboardingUserPage() {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 >
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="17 8 12 3 7 8" />
-                  <line x1="12" y1="3" x2="12" y2="15" />
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                  <path d="M12 17h.01" />
                 </svg>
               </button>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  const url = URL.createObjectURL(file);
-                  setAvatarSrc(url);
-                }}
-              />
-            </div>
-
-            <h2 className="text-[#1e3456] font-bold text-xl mb-3">Foto de Perfil</h2>
-            <p className="text-xs text-slate-500 leading-relaxed max-w-[200px]">
-              PNG o JPG, máx 5MB. Una foto profesional te ayuda a destacar ante los empleadores.
-            </p>
-          </div>
-        </div>
-
-        <div className="lg:col-span-8 flex flex-col space-y-6">
-          <div className="bg-white rounded-[2rem] p-8 md:p-10 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04)]">
-            <div className="flex items-center gap-3 mb-8">
-              <div className="bg-[#f1f5f9] p-2.5 rounded-xl text-[#294266]">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-                  <circle cx="12" cy="7" r="4" />
-                </svg>
-              </div>
-              <h2 className="text-2xl font-bold text-[#1e3456] tracking-tight">
-                Detalles Personales
-              </h2>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div>
-                <label className="block text-[11px] font-bold text-[#1e3456] uppercase tracking-wider mb-2">
-                  Nombre Completo
-                </label>
-                <Input
-                  value={fullName}
-                  onChange={(e) => {
-                    clearError();
-                    setFullName(e.target.value);
-                    setFieldErrors((p) => {
-                      const { fullName: _removed, ...rest } = p;
-                      return rest;
-                    });
-                  }}
-                  placeholder="Alex Johnson"
-                />
-                {fieldErrors.fullName ? <div className="text-[12px] text-red-600 mt-2">{fieldErrors.fullName}</div> : null}
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-[#1e3456] uppercase tracking-wider mb-2">
-                  Número de Teléfono
-                </label>
-                <Input
-                  value={phone}
-                  onChange={(e) => {
-                    clearError();
-                    setPhone(e.target.value);
-                    setFieldErrors((p) => {
-                      const { phone: _removed, ...rest } = p;
-                      return rest;
-                    });
-                  }}
-                  placeholder="+1 (555) 000-0000"
-                  type="tel"
-                />
-                {fieldErrors.phone ? <div className="text-[12px] text-red-600 mt-2">{fieldErrors.phone}</div> : null}
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-[11px] font-bold text-[#1e3456] uppercase tracking-wider mb-2">
-                  Ciudad Actual
-                </label>
-                <Input
-                  value={city}
-                  onChange={(e) => {
-                    clearError();
-                    setCity(e.target.value);
-                    setFieldErrors((p) => {
-                      const { city: _removed, ...rest } = p;
-                      return rest;
-                    });
-                  }}
-                  placeholder="San Francisco, CA"
-                  leftSlot={
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="text-slate-400"
-                    >
-                      <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
-                      <circle cx="12" cy="10" r="3" />
-                    </svg>
-                  }
-                />
-                {fieldErrors.city ? <div className="text-[12px] text-red-600 mt-2">{fieldErrors.city}</div> : null}
-              </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-[2rem] p-8 md:p-10 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04)]">
-            <div className="flex items-center gap-3 mb-8">
-              <div className="bg-[#f1f5f9] p-2.5 rounded-xl text-[#294266]">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M22 10v6" />
-                  <path d="M2 10l10-5 10 5-10 5z" />
-                  <path d="M6 12v5c3 3 9 3 12 0v-5" />
-                </svg>
+          <div className="px-5 py-8 sm:px-8 lg:px-10">
+            <section className="overflow-hidden rounded-[2rem] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(239,245,255,0.94))] p-6 shadow-[0_20px_60px_-28px_rgba(30,52,86,0.28)] sm:p-8">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#5d7ba6]">Tu carta de presentacion</p>
+                  <h2 className="mt-2 text-3xl font-bold tracking-tight text-[#1e3456]">Haz que tu perfil destaque.</h2>
+                  <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">
+                    Este resumen usa tu acceso con Gmail como punto de partida, pero tu puedes modificar nombre, ubicacion y el resto de datos cuando quieras.
+                  </p>
+                </div>
+                <span className="inline-flex w-fit rounded-full bg-[#e8f0fb] px-4 py-2 text-xs font-semibold text-[#294266]">
+                  Visible para reclutadores
+                </span>
               </div>
-              <h2 className="text-2xl font-bold text-[#1e3456] tracking-tight">
-                Historial Académico
-              </h2>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
-              <div className="md:col-span-12">
-                <label className="block text-[11px] font-bold text-[#1e3456] uppercase tracking-wider mb-2">
-                  Universidad / Instituto
-                </label>
-                <Input
-                  value={university}
-                  onChange={(e) => {
-                    clearError();
-                    setUniversity(e.target.value);
-                    setFieldErrors((p) => {
-                      const { university: _removed, ...rest } = p;
-                      return rest;
-                    });
-                  }}
-                  placeholder="Universidad de Stanford"
-                />
-                {fieldErrors.university ? <div className="text-[12px] text-red-600 mt-2">{fieldErrors.university}</div> : null}
-              </div>
-              <div className="md:col-span-6">
-                <label className="block text-[11px] font-bold text-[#1e3456] uppercase tracking-wider mb-2">
-                  Programa de Grado
-                </label>
-                <Input
-                  value={degree}
-                  onChange={(e) => {
-                    clearError();
-                    setDegree(e.target.value);
-                    setFieldErrors((p) => {
-                      const { degree: _removed, ...rest } = p;
-                      return rest;
-                    });
-                  }}
-                  placeholder="Lic. Ciencias de la Computación"
-                />
-                {fieldErrors.degree ? <div className="text-[12px] text-red-600 mt-2">{fieldErrors.degree}</div> : null}
-              </div>
-              <div className="md:col-span-3">
-                <label className="block text-[11px] font-bold text-[#1e3456] uppercase tracking-wider mb-2">
-                  Año Grad.
-                </label>
-                <Input
-                  value={gradYear}
-                  onChange={(e) => {
-                    clearError();
-                    setGradYear(e.target.value);
-                    setFieldErrors((p) => {
-                      const { gradYear: _removed, ...rest } = p;
-                      return rest;
-                    });
-                  }}
-                  placeholder="2024"
-                  inputMode="numeric"
-                  className="text-center md:text-left"
-                />
-                {fieldErrors.gradYear ? <div className="text-[12px] text-red-600 mt-2">{fieldErrors.gradYear}</div> : null}
-              </div>
-              <div className="md:col-span-3">
-                <label className="block text-[11px] font-bold text-[#1e3456] uppercase tracking-wider mb-2">
-                  Promedio
-                </label>
-                <Input
-                  value={gpa}
-                  onChange={(e) => {
-                    clearError();
-                    setGpa(e.target.value);
-                    setFieldErrors((p) => {
-                      const { gpa: _removed, ...rest } = p;
-                      return rest;
-                    });
-                  }}
-                  placeholder="3.8"
-                  inputMode="decimal"
-                  className="text-center md:text-left"
-                />
-                {fieldErrors.gpa ? <div className="text-[12px] text-red-600 mt-2">{fieldErrors.gpa}</div> : null}
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-[2rem] p-8 md:p-10 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.04)]">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="bg-[#f1f5f9] p-2.5 rounded-xl text-[#294266]">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
-                  <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
-                  <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
-                  <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
-                </svg>
-              </div>
-              <h2 className="text-2xl font-bold text-[#1e3456] tracking-tight">
-                Trayectoria Profesional
-              </h2>
-            </div>
-
-            <p className="text-sm text-slate-500 mb-6 leading-relaxed">
-              ¿Qué industrias o roles te emocionan? Selecciona al menos tres para ayudarnos a
-              personalizar tu feed.
-            </p>
-
-            <Input
-              value={careerQuery}
-              onChange={(e) => setCareerQuery(e.target.value)}
-              placeholder="Buscar carreras (ej. Diseño, Finanzas)"
-              leftSlot={
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="text-slate-400"
-                >
-                  <circle cx="11" cy="11" r="8" />
-                  <path d="m21 21-4.3-4.3" />
-                </svg>
-              }
-            />
-
-            <div className="flex flex-wrap gap-3 mt-6">
-              {filteredCareers.map((career) => {
-                const selected = selectedCareers.includes(career);
-                return (
-                  <button
-                    key={career}
-                    type="button"
-                    onClick={() => {
-                      clearError();
-                      setSelectedCareers((prev) => {
-                        if (prev.includes(career)) return prev.filter((c) => c !== career);
-                        return [...prev, career];
-                      });
-                      setFieldErrors((p) => {
-                        const { careerInterests: _removed, ...rest } = p;
-                        return rest;
-                      });
-                    }}
-                    className={cn(
-                      "px-4 py-2.5 text-xs rounded-full transition-colors border",
-                      selected
-                        ? "bg-[#294266] text-white font-semibold border-transparent hover:bg-[#1a2b44]"
-                        : "bg-white text-slate-600 border-slate-200 font-medium hover:border-[#294266] hover:text-[#294266]",
-                    )}
-                  >
-                    <span className="inline-flex items-center gap-1.5">
-                      {career}
-                      {selected ? (
+              <div className="mt-8 grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+                <div className="rounded-[1.75rem] border border-white/80 bg-white/80 p-5 shadow-sm">
+                  <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+                    <div className="relative mx-auto sm:mx-0">
+                      <div className="h-24 w-24 overflow-hidden rounded-3xl border-4 border-white bg-slate-100 shadow-lg sm:h-28 sm:w-28">
+                        <img src={avatarSrc} alt="" className="h-full w-full object-cover" />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => fileRef.current?.click()}
+                        className="absolute -bottom-2 -right-2 flex h-10 w-10 items-center justify-center rounded-2xl border-4 border-white bg-[#294266] text-white shadow-lg transition-colors hover:bg-[#1a2b44]"
+                      >
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
-                          width="12"
-                          height="12"
+                          width="16"
+                          height="16"
                           viewBox="0 0 24 24"
                           fill="none"
                           stroke="currentColor"
-                          strokeWidth="2.5"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="17 8 12 3 7 8" />
+                          <line x1="12" y1="3" x2="12" y2="15" />
+                        </svg>
+                      </button>
+                      <input
+                        ref={fileRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (!file) return;
+                          setAvatarSrc(URL.createObjectURL(file));
+                        }}
+                      />
+                    </div>
+
+                    <div className="min-w-0 flex-1 text-center sm:text-left">
+                      <p className="text-2xl font-bold leading-tight text-[#1e3456] break-words">
+                        {fullName.trim() || "Tu nombre profesional"}
+                      </p>
+                      <p className="mt-2 break-all text-sm leading-6 text-slate-500">{userEmail || "Tu correo de acceso"}</p>
+                      <div className="mt-4 flex flex-wrap justify-center gap-2 sm:justify-start">
+                        <span className="inline-flex items-center rounded-full border border-[#dde7f5] bg-[#f7faff] px-3 py-1.5 text-xs font-medium text-[#294266]">
+                          {city.trim() || "Agrega tu ciudad actual"}
+                        </span>
+                        <span className="inline-flex items-center rounded-full border border-[#dde7f5] bg-white px-3 py-1.5 text-xs font-medium text-slate-500">
+                          Perfil editable
+                        </span>
+                      </div>
+                      <p className="mt-4 inline-flex rounded-full bg-white/80 px-3 py-1 text-xs text-slate-500 shadow-sm">
+                        Foto en PNG o JPG, max. 5 MB
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#5d7ba6]">Prioridad de reclutadores</p>
+                      <h3 className="mt-2 text-xl font-bold text-[#1e3456]">Lo que mas van a revisar</h3>
+                    </div>
+                    <span className="rounded-full bg-[#1e3456] px-3 py-1 text-xs font-semibold text-white">{completionPercentage}%</span>
+                  </div>
+
+                  <div className="mt-5 space-y-3">
+                    {sectionStatuses.map((section) => (
+                      <div
+                        key={section.label}
+                        className={cn(
+                          "flex items-center justify-between rounded-2xl border px-4 py-3",
+                          section.done ? "border-emerald-200 bg-emerald-50/80" : "border-slate-200 bg-slate-50",
+                        )}
+                      >
+                        <span className="text-sm font-medium text-slate-700">{section.label}</span>
+                        <span
+                          className={cn(
+                            "inline-flex h-7 w-7 items-center justify-center rounded-full",
+                            section.done ? "bg-emerald-600 text-white" : "bg-white text-slate-400 border border-slate-200",
+                          )}
+                        >
+                          {section.done ? (
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="14"
+                              height="14"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M20 6 9 17l-5-5" />
+                            </svg>
+                          ) : (
+                            <span className="text-xs font-bold">!</span>
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <p className="mt-5 text-sm leading-relaxed text-slate-500">
+                    Prioriza ubicacion, formacion y areas de interes. Ese contexto ayuda mucho mas que una nota promedio al momento de evaluar un perfil junior.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-6 grid gap-3 md:grid-cols-3">
+                <div className="rounded-2xl border border-[#dde7f5] bg-white/85 p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#5d7ba6]">Ubicacion destacada</p>
+                  <p className="mt-2 text-sm font-semibold text-[#1e3456]">{city.trim() || "Completa este campo para aparecer en vacantes cercanas"}</p>
+                </div>
+                <div className="rounded-2xl border border-[#dde7f5] bg-white/85 p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#5d7ba6]">Formacion relevante</p>
+                  <p className="mt-2 text-sm font-semibold text-[#1e3456]">
+                    {degree.trim() || "Agrega tu programa"}{degree.trim() && university.trim() ? " · " : ""}
+                    {university.trim() || "y tu universidad"}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-[#dde7f5] bg-white/85 p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#5d7ba6]">Intereses clave</p>
+                  <p className="mt-2 text-sm font-semibold text-[#1e3456]">{selectedCareerPreview}</p>
+                </div>
+              </div>
+            </section>
+
+            <main className="mt-8 space-y-6">
+              <section className="overflow-hidden rounded-[2rem] border border-white/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.98),rgba(236,243,254,0.94))] shadow-[0_26px_70px_-34px_rgba(30,52,86,0.26)]">
+                <div className="border-b border-slate-100 px-6 py-6 sm:px-8">
+                  <span className="rounded-full bg-[#e8f0fb] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-[#294266]">
+                    Incorporacion
+                  </span>
+                  <h1 className="mt-4 text-4xl font-bold tracking-tight text-[#1e3456] sm:text-5xl">Diseña tu futuro.</h1>
+                  <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-500 sm:text-base">
+                    Completa un perfil claro, moderno y facil de revisar. Hemos reorganizado este formulario para resaltar solo la informacion que realmente aporta contexto profesional a tu candidatura.
+                  </p>
+                </div>
+
+                <div className="grid gap-4 px-6 py-6 sm:px-8 lg:grid-cols-3">
+                  {[
+                    {
+                      title: "Ubicacion y contacto",
+                      desc: "Facilita matches por ciudad y permite que reclutadores te contacten rapido.",
+                    },
+                    {
+                      title: "Formacion relevante",
+                      desc: "Prioriza institucion, programa y anio de egreso, que son datos realmente utiles.",
+                    },
+                    {
+                      title: "Intereses profesionales",
+                      desc: "Muestra hacia donde quieres crecer para personalizar oportunidades y vacantes.",
+                    },
+                  ].map((item) => (
+                    <div key={item.title} className="rounded-2xl border border-[#dde7f5] bg-white/85 p-5 shadow-sm">
+                      <div className="mb-3 h-10 w-10 rounded-2xl bg-[#edf3fd] text-[#294266] flex items-center justify-center">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="18"
+                          height="18"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
                           strokeLinecap="round"
                           strokeLinejoin="round"
                         >
                           <path d="M20 6 9 17l-5-5" />
                         </svg>
-                      ) : null}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            {fieldErrors.careerInterests ? (
-              <div className="text-[12px] text-red-600 mt-4">{fieldErrors.careerInterests}</div>
-            ) : null}
-          </div>
+                      </div>
+                      <p className="text-base font-bold text-[#1e3456]">{item.title}</p>
+                      <p className="mt-2 text-sm leading-6 text-slate-500">{item.desc}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
 
-          <div className="flex flex-col sm:flex-row items-center justify-between mt-8 gap-6 px-2">
-            <p className="text-xs text-slate-500 max-w-xs text-center sm:text-left leading-relaxed">
-              Al finalizar, aceptas nuestros términos y aceptas recibir alertas de carreras.
-            </p>
-            <Button
-              type="button"
-              disabled={!canFinish || isLoading}
-              className="bg-[#243f65] hover:bg-[#15263d] shadow-lg shadow-[#243f65]/20 rounded-full px-8 py-4 w-full sm:w-auto justify-center"
-              onClick={async () => {
-                if (!validate()) return;
-                await complete({
-                  fullName: fullName.trim(),
-                  phone: phone.trim() ? phone.trim() : null,
-                  city: city.trim(),
-                  university: university.trim(),
-                  degree: degree.trim(),
-                  gradYear: gradYear.trim(),
-                  gpa: gpa.trim() ? gpa.trim() : null,
-                  careerInterests: selectedCareers,
-                });
-              }}
-            >
-              {isLoading ? "Guardando..." : isProfileComplete ? "Guardar cambios" : "Finalizar Perfil"}
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M5 12h14" />
-                <path d="m12 5 7 7-7 7" />
-              </svg>
-            </Button>
+              <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_18px_45px_-28px_rgba(15,23,42,0.22)] sm:p-8">
+                <div className="flex flex-col gap-3 border-b border-slate-100 pb-6 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-2xl bg-[#edf3fd] p-3 text-[#294266]">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                        <circle cx="12" cy="7" r="4" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-bold tracking-tight text-[#1e3456]">Detalles personales</h2>
+                      <p className="mt-1 text-sm text-slate-500">Tu informacion base debe verse clara, confiable y facil de escanear.</p>
+                    </div>
+                  </div>
+                  <div className="rounded-full bg-[#f7faff] px-4 py-2 text-xs font-semibold text-[#5d7ba6] border border-[#dde7f5]">
+                    Informacion prioritaria
+                  </div>
+                </div>
+
+                <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2">
+                  <div>
+                    <label className="mb-2 block text-[11px] font-bold uppercase tracking-wider text-[#1e3456]">Nombre completo</label>
+                    <Input
+                      value={fullName}
+                      onChange={(event) => {
+                        clearError();
+                        setFullName(event.target.value);
+                        clearFieldError("fullName");
+                      }}
+                      placeholder="Alex Johnson"
+                    />
+                    {fieldErrors.fullName ? <div className="mt-2 text-[12px] text-red-600">{fieldErrors.fullName}</div> : null}
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-[11px] font-bold uppercase tracking-wider text-[#1e3456]">Numero de telefono</label>
+                    <Input
+                      value={phone}
+                      type="tel"
+                      onChange={(event) => {
+                        clearError();
+                        setPhone(event.target.value);
+                        clearFieldError("phone");
+                      }}
+                      placeholder="+1 (555) 000-0000"
+                    />
+                    {fieldErrors.phone ? <div className="mt-2 text-[12px] text-red-600">{fieldErrors.phone}</div> : null}
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="mb-2 block text-[11px] font-bold uppercase tracking-wider text-[#1e3456]">Correo</label>
+                    <Input
+                      value={userEmail}
+                      readOnly
+                      placeholder="tu-correo@gmail.com"
+                      className="bg-slate-50/80 text-slate-600"
+                      leftSlot={
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="text-slate-400"
+                        >
+                          <path d="m22 7-8.991 5.727a2 2 0 0 1-2.018 0L2 7" />
+                          <rect x="2" y="4" width="20" height="16" rx="2" />
+                        </svg>
+                      }
+                      rightSlot={
+                        userEmail ? (
+                          <button
+                            type="button"
+                            className="text-[11px] font-semibold text-[#294266] hover:text-[#1a2b44] transition-colors"
+                            onClick={() => {
+                              void navigator.clipboard?.writeText(userEmail).catch(() => {});
+                            }}
+                          >
+                            Copiar
+                          </button>
+                        ) : null
+                      }
+                    />
+                    <p className="mt-2 text-[12px] text-slate-500 leading-relaxed">
+                      Este es el correo con el que iniciaste sesión. Puedes completar tu nombre y datos y cambiarlos cuando quieras.
+                    </p>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <div className="rounded-[1.75rem] border border-[#d9e5f7] bg-[linear-gradient(135deg,rgba(233,241,252,0.95),rgba(255,255,255,0.98))] p-5 shadow-[0_18px_45px_-28px_rgba(41,66,102,0.35)]">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <label className="mb-1 block text-[11px] font-bold uppercase tracking-wider text-[#1e3456]">Ciudad actual</label>
+                          <p className="text-sm leading-6 text-slate-500">
+                            Completa esta ubicacion para priorizar ofertas cercanas y dar contexto rapido sobre tu disponibilidad geografica.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2 text-[11px] text-slate-500">
+                          <span className="inline-flex items-center gap-1 rounded-full border border-white/80 bg-white/85 px-2.5 py-1">
+                            <span className="h-1.5 w-1.5 rounded-full bg-[#294266]" />
+                            Solo ciudades
+                          </span>
+                          <span className="inline-flex items-center gap-1 rounded-full border border-white/80 bg-white/85 px-2.5 py-1">
+                            <span className="h-1.5 w-1.5 rounded-full bg-[#7c93b6]" />
+                            Perfil consistente
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="mt-4">
+                        <Input
+                          ref={cityInputRef}
+                          value={city}
+                          onChange={(event) => {
+                            clearError();
+                            setCity(event.target.value);
+                            clearFieldError("city");
+                          }}
+                          placeholder="Ej. Bogota, CO"
+                          className="border border-white/70 bg-white shadow-sm"
+                          leftSlot={
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              className="text-slate-400"
+                            >
+                              <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+                              <circle cx="12" cy="10" r="3" />
+                            </svg>
+                          }
+                          rightSlot={
+                            cityAutocompleteStatus === "loading" ? (
+                              <span className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-[#294266]/20 border-t-[#294266]" />
+                            ) : cityAutocompleteStatus === "ready" ? (
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                className="text-emerald-600"
+                              >
+                                <path d="M20 6 9 17l-5-5" />
+                              </svg>
+                            ) : (
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                className="text-slate-400"
+                              >
+                                <path d="M12 3v18" />
+                                <path d="M3 12h18" />
+                              </svg>
+                            )
+                          }
+                        />
+                        <p className="mt-3 text-[12px] leading-6 text-slate-500">{cityAutocompleteMeta}</p>
+                      </div>
+                    </div>
+                    {fieldErrors.city ? <div className="mt-2 text-[12px] text-red-600">{fieldErrors.city}</div> : null}
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_18px_45px_-28px_rgba(15,23,42,0.22)] sm:p-8">
+                <div className="flex flex-col gap-3 border-b border-slate-100 pb-6 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-2xl bg-[#edf3fd] p-3 text-[#294266]">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M22 10v6" />
+                        <path d="M2 10l10-5 10 5-10 5z" />
+                        <path d="M6 12v5c3 3 9 3 12 0v-5" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-bold tracking-tight text-[#1e3456]">Formacion academica</h2>
+                      <p className="mt-1 text-sm text-slate-500">Destaca institucion, programa y año de egreso. Esa informacion pesa mucho mas que una nota promedio.</p>
+                    </div>
+                  </div>
+                  <div className="rounded-full bg-[#f7faff] px-4 py-2 text-xs font-semibold text-[#5d7ba6] border border-[#dde7f5]">
+                    Sin promedio academico
+                  </div>
+                </div>
+
+                <div className="mt-6 grid gap-5 md:grid-cols-12">
+                  <div className="md:col-span-12">
+                    <label className="mb-2 block text-[11px] font-bold uppercase tracking-wider text-[#1e3456]">Universidad / instituto</label>
+                    <Input
+                      value={university}
+                      onChange={(event) => {
+                        clearError();
+                        setUniversity(event.target.value);
+                        clearFieldError("university");
+                      }}
+                      placeholder="Universidad de Stanford"
+                    />
+                    {fieldErrors.university ? <div className="mt-2 text-[12px] text-red-600">{fieldErrors.university}</div> : null}
+                  </div>
+
+                  <div className="md:col-span-8">
+                    <label className="mb-2 block text-[11px] font-bold uppercase tracking-wider text-[#1e3456]">Programa de grado</label>
+                    <Input
+                      value={degree}
+                      onChange={(event) => {
+                        clearError();
+                        setDegree(event.target.value);
+                        clearFieldError("degree");
+                      }}
+                      placeholder="Lic. Ciencias de la Computacion"
+                    />
+                    {fieldErrors.degree ? <div className="mt-2 text-[12px] text-red-600">{fieldErrors.degree}</div> : null}
+                  </div>
+
+                  <div className="md:col-span-4">
+                    <label className="mb-2 block text-[11px] font-bold uppercase tracking-wider text-[#1e3456]">Año de egreso</label>
+                    <Input
+                      value={gradYear}
+                      inputMode="numeric"
+                      onChange={(event) => {
+                        clearError();
+                        setGradYear(event.target.value);
+                        clearFieldError("gradYear");
+                      }}
+                      placeholder="2024"
+                    />
+                    {fieldErrors.gradYear ? <div className="mt-2 text-[12px] text-red-600">{fieldErrors.gradYear}</div> : null}
+                  </div>
+                </div>
+
+                <div className="mt-6 grid gap-4 md:grid-cols-3">
+                  {[
+                    {
+                      title: "Institucion reconocible",
+                      desc: "Ayuda a contextualizar tu base academica y entorno formativo.",
+                    },
+                    {
+                      title: "Programa claro",
+                      desc: "Permite al reclutador entender rapido tu enfoque de especialidad.",
+                    },
+                    {
+                      title: "Egreso reciente",
+                      desc: "Da visibilidad inmediata a tu etapa profesional actual.",
+                    },
+                  ].map((item) => (
+                    <div key={item.title} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                      <p className="text-sm font-bold text-[#1e3456]">{item.title}</p>
+                      <p className="mt-2 text-sm leading-6 text-slate-500">{item.desc}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_18px_45px_-28px_rgba(15,23,42,0.22)] sm:p-8">
+                <div className="flex flex-col gap-3 border-b border-slate-100 pb-6 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-2xl bg-[#edf3fd] p-3 text-[#294266]">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
+                        <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
+                        <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
+                        <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-bold tracking-tight text-[#1e3456]">Intereses profesionales</h2>
+                      <p className="mt-1 text-sm text-slate-500">Selecciona minimo tres areas para mostrar enfoque, curiosidad y afinidad con ciertos roles.</p>
+                    </div>
+                  </div>
+                  <div className="rounded-full bg-[#1e3456] px-4 py-2 text-xs font-semibold text-white">
+                    {selectedCareers.length} seleccionadas
+                  </div>
+                </div>
+
+                <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
+                  <div>
+                    <Input
+                      value={careerQuery}
+                      onChange={(event) => setCareerQuery(event.target.value)}
+                      placeholder="Buscar roles o industrias (ej. Diseño, Finanzas)"
+                      leftSlot={
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="text-slate-400"
+                        >
+                          <circle cx="11" cy="11" r="8" />
+                          <path d="m21 21-4.3-4.3" />
+                        </svg>
+                      }
+                    />
+
+                    <div className="mt-5 flex flex-wrap gap-3">
+                      {filteredCareers.map((career) => {
+                        const selected = selectedCareers.includes(career);
+                        return (
+                          <button
+                            key={career}
+                            type="button"
+                            onClick={() => {
+                              clearError();
+                              setSelectedCareers((prev) => {
+                                if (prev.includes(career)) return prev.filter((item) => item !== career);
+                                return [...prev, career];
+                              });
+                              clearFieldError("careerInterests");
+                            }}
+                            className={cn(
+                              "rounded-2xl border px-4 py-3 text-sm transition-all",
+                              selected
+                                ? "border-transparent bg-[linear-gradient(135deg,#294266,#5d85c4)] text-white shadow-lg shadow-[#294266]/20"
+                                : "border-slate-200 bg-white text-slate-600 hover:border-[#294266] hover:text-[#294266]",
+                            )}
+                          >
+                            <span className="inline-flex items-center gap-2 font-medium">
+                              {career}
+                              {selected ? (
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  width="14"
+                                  height="14"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <path d="M20 6 9 17l-5-5" />
+                                </svg>
+                              ) : null}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {fieldErrors.careerInterests ? <div className="mt-4 text-[12px] text-red-600">{fieldErrors.careerInterests}</div> : null}
+                  </div>
+
+                  <div className="rounded-[1.75rem] border border-[#dde7f5] bg-[linear-gradient(180deg,#f7faff,#ffffff)] p-5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#5d7ba6]">Resumen visible</p>
+                    <h3 className="mt-2 text-xl font-bold text-[#1e3456]">Tus fortalezas clave</h3>
+                    <div className="mt-5 space-y-3">
+                      {selectedCareers.slice(0, 5).map((career, index) => (
+                        <div key={career} className="flex items-center gap-3 rounded-2xl border border-white bg-white/90 px-4 py-3 shadow-sm">
+                          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#e8f0fb] text-xs font-bold text-[#294266]">
+                            {index + 1}
+                          </span>
+                          <span className="text-sm font-semibold text-[#1e3456]">{career}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-5 text-sm leading-6 text-slate-500">
+                      Tus intereses ayudan a resaltar afinidad con roles, industrias y rutas de crecimiento.
+                    </p>
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-[2rem] border border-[#dce8f8] bg-[linear-gradient(135deg,rgba(234,242,253,0.95),rgba(255,255,255,0.98))] p-6 shadow-[0_18px_45px_-28px_rgba(30,52,86,0.25)] sm:p-8">
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="max-w-2xl">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#5d7ba6]">Revision final</p>
+                    <h2 className="mt-2 text-2xl font-bold tracking-tight text-[#1e3456]">Deja un perfil profesional, moderno y facil de evaluar.</h2>
+                    <p className="mt-3 text-sm leading-7 text-slate-500">
+                      Al finalizar, aceptas nuestros terminos y habilitas recomendaciones acordes a tu etapa, ciudad y objetivos profesionales.
+                    </p>
+                  </div>
+
+                  <div className="flex w-full flex-col gap-3 sm:w-auto">
+                    <Button
+                      type="button"
+                      disabled={!canFinish || isLoading}
+                      className="w-full justify-center rounded-full bg-[#243f65] px-8 py-4 shadow-lg shadow-[#243f65]/20 hover:bg-[#15263d] sm:w-auto"
+                      onClick={async () => {
+                        if (!validate()) return;
+                        await complete({
+                          fullName: fullName.trim(),
+                          phone: phone.trim() ? phone.trim() : null,
+                          city: city.trim(),
+                          university: university.trim(),
+                          degree: degree.trim(),
+                          gradYear: gradYear.trim(),
+                          gpa: null,
+                          careerInterests: selectedCareers,
+                        });
+                      }}
+                    >
+                      {isLoading ? "Guardando..." : canFinish ? "Finalizar perfil" : "Completa los campos clave"}
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M5 12h14" />
+                        <path d="m12 5 7 7-7 7" />
+                      </svg>
+                    </Button>
+                    <p className="text-center text-xs text-slate-500 sm:text-right">
+                      {canFinish ? "Tu perfil ya tiene la informacion esencial para empezar." : "Faltan campos prioritarios por completar."}
+                    </p>
+                  </div>
+                </div>
+                {error ? (
+                  <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {error}
+                  </div>
+                ) : null}
+              </section>
+            </main>
           </div>
-          {error ? (
-            <div className="mt-6 px-2">
-              <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-                {error}
-              </div>
-            </div>
-          ) : null}
         </div>
-      </div>
 
-      <div className="w-full max-w-5xl mx-auto px-4 mt-20 flex flex-col md:flex-row justify-between items-center text-[11px] text-slate-400 gap-4">
-        <p>© 2024 GradPath. Tu viaje profesional comienza aquí.</p>
-        <div className="flex gap-6">
-          <a href="#" className="hover:text-slate-600 transition-colors">
-            Política de Privacidad
-          </a>
-          <a href="#" className="hover:text-slate-600 transition-colors">
-            Términos de Servicio
-          </a>
-          <a href="#" className="hover:text-slate-600 transition-colors">
-            Centro de Ayuda
-          </a>
+        <div className="mx-auto mt-10 flex max-w-6xl flex-col items-center justify-between gap-4 px-4 text-[11px] text-slate-400 sm:flex-row sm:px-6 lg:px-8">
+          <p>© 2024 GradPath. Tu viaje profesional comienza aqui.</p>
+          <div className="flex flex-wrap items-center justify-center gap-6">
+            <a href="#" className="transition-colors hover:text-slate-600">
+              Politica de Privacidad
+            </a>
+            <a href="#" className="transition-colors hover:text-slate-600">
+              Terminos de Servicio
+            </a>
+            <a href="#" className="transition-colors hover:text-slate-600">
+              Centro de Ayuda
+            </a>
+          </div>
         </div>
       </div>
     </div>

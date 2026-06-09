@@ -119,31 +119,6 @@ export function createTalentRouter(ctx: AppContext) {
         { userId: req.auth.id },
       );
 
-      const completeness = (() => {
-        if (!profile) return 0;
-        const fields: Array<unknown> = [
-          profile.fullName,
-          profile.location,
-          profile.phone,
-          profile.university,
-          profile.degree,
-          profile.gradYear,
-          profile.gpa,
-          (profile.careerInterests ?? []).length ? profile.careerInterests : null,
-          profile.linkedin,
-          profile.github,
-          profile.portfolio,
-          profile.headline,
-        ];
-        const filled = fields.filter((v) => {
-          if (v === null || v === undefined) return false;
-          if (typeof v === "string") return v.trim().length > 0;
-          if (Array.isArray(v)) return v.length > 0;
-          return true;
-        }).length;
-        return Math.round((filled / fields.length) * 100);
-      })();
-
       return res.json({
         user: req.auth,
         profile,
@@ -151,7 +126,6 @@ export function createTalentRouter(ctx: AppContext) {
           cvsCount: counts?.cvsCount ?? 0,
           aiSessionsCount: counts?.aiSessionsCount ?? 0,
           interviewsCount: counts?.interviewsCount ?? 0,
-          profileCompleteness: completeness,
         },
         recent: {
           cvs: recentCvs,
