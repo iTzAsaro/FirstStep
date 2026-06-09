@@ -42,9 +42,23 @@ export function SignUpCompanyPage() {
       return v.replace(/\/rest\/v1(\/.*)?$/i, "").replace(/\/+$/g, "");
     }
   };
+  const readEmailFromJwt = (token: string) => {
+    try {
+      const [, payload] = token.split(".");
+      if (!payload) return null;
+      const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+      const parsed = JSON.parse(json) as { email?: unknown };
+      return typeof parsed.email === "string" ? parsed.email : null;
+    } catch {
+      return null;
+    }
+  };
 
   const [companyName, setCompanyName] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("email") ?? "";
+  });
   const [companySize, setCompanySize] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -143,7 +157,6 @@ export function SignUpCompanyPage() {
 
     const hashParams = new URLSearchParams(window.location.hash.startsWith("#") ? window.location.hash.slice(1) : "");
     const hashAccessToken = hashParams.get("access_token");
-    const hashRefreshToken = hashParams.get("refresh_token");
     const hashErrorRaw = hashParams.get("error_description") ?? hashParams.get("error") ?? null;
     const hashError = hashErrorRaw ? decodeURIComponent(hashErrorRaw) : null;
 
@@ -170,23 +183,22 @@ export function SignUpCompanyPage() {
         }
 
         const supabase = createClient(normalizedSupabaseUrl, supabaseAnonKey.trim());
+        let supabaseAccessToken: string | null = null;
+        let userEmail: string | null = null;
         if (code) {
           const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
           if (exchangeError) throw exchangeError;
-        } else if (hashAccessToken && hashRefreshToken) {
-          const { error: sessionError } = await supabase.auth.setSession({
-            access_token: hashAccessToken,
-            refresh_token: hashRefreshToken,
-          });
-          if (sessionError) throw sessionError;
+          const { data } = await supabase.auth.getSession();
+          const sbSession = data.session;
+          supabaseAccessToken = sbSession?.access_token ?? null;
+          userEmail = sbSession?.user?.email ?? null;
+        } else if (hashAccessToken) {
+          supabaseAccessToken = hashAccessToken;
+          userEmail = readEmailFromJwt(hashAccessToken);
+          if (!userEmail) throw new Error("[oauth:decode-token-email] No se pudo leer el email desde el token OAuth.");
         } else {
           throw new Error("Respuesta OAuth incompleta.");
         }
-
-        const { data } = await supabase.auth.getSession();
-        const sbSession = data.session;
-        const supabaseAccessToken = sbSession?.access_token;
-        const userEmail = sbSession?.user?.email ?? null;
         if (!supabaseAccessToken || !userEmail) throw new Error("No se pudo obtener el access token o email de Supabase.");
 
         const res = await fetch("/api/auth/login/oauth", {
@@ -286,7 +298,7 @@ export function SignUpCompanyPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-white">
+    <div className="min-h-screen bg-[#f6f8fb] text-slate-800 flex items-center justify-center p-4 md:p-8">
       {oauthConfigOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <button type="button" className="absolute inset-0 bg-slate-950/40" onClick={() => setOauthConfigOpen(false)} />
@@ -319,7 +331,7 @@ export function SignUpCompanyPage() {
               </div>
               <div>
                 <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-2">
-                  Supabase Anon Key
+                  Supabase Publishable Key
                 </label>
                 <Input
                   type="password"
@@ -406,86 +418,127 @@ export function SignUpCompanyPage() {
           </div>
         </div>
       ) : null}
-      <div className="w-full md:w-1/2 bg-[#1e3456] flex flex-col justify-between p-8 md:p-12 lg:p-16 relative overflow-hidden text-white min-h-[500px] md:min-h-screen">
-        <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-blue-400/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
+      <div className="w-full max-w-[1100px] bg-white rounded-[2rem] overflow-hidden shadow-[0_20px_50px_-12px_rgba(0,0,0,0.12)] grid grid-cols-1 md:grid-cols-12">
+        <div className="md:col-span-5 bg-[#1e3456] text-white p-10 md:p-12 relative overflow-hidden">
+          <div className="absolute -top-24 -right-24 w-72 h-72 bg-[#5d85c4]/20 rounded-full blur-3xl" />
+          <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-white/5 rounded-full blur-3xl" />
 
-        <div className="relative z-10 flex items-center gap-2">
-          <span className="font-bold text-xl tracking-tight">FirsTep</span>
-          <span className="text-[10px] font-bold tracking-widest uppercase bg-white/10 px-2.5 py-1 rounded-full text-blue-100">
-            Para Empresas
-          </span>
-        </div>
+          <div className="relative">
+            <p className="text-[11px] font-bold tracking-widest uppercase text-blue-100/80">
+              Empresas
+            </p>
+            <h1 className="mt-4 text-3xl md:text-4xl font-bold tracking-tight">
+              Crea tu cuenta
+            </h1>
+            <p className="mt-4 text-blue-100/80 leading-relaxed">
+              Registra tu empresa y empieza a gestionar tu proceso de selección con un flujo claro y rápido.
+            </p>
 
-        <div className="relative z-10 my-auto py-12">
-          <h1 className="text-4xl md:text-5xl lg:text-[54px] font-bold leading-[1.1] tracking-tight mb-6 max-w-lg">
-            Encuentra tu nueva generación de talentos
-          </h1>
-          <p className="text-blue-100/80 text-base md:text-lg leading-relaxed mb-10 max-w-md">
-            Únete a una comunidad de empleadores con visión de futuro que conectan con 12k+ graduados
-            listos para trabajar. Optimiza tus contrataciones con IA.
-          </p>
-
-          <div className="flex items-center gap-4">
-            <div className="flex -space-x-3">
+            <div className="mt-8 grid grid-cols-1 gap-4">
               {[
-                "https://i.pravatar.cc/100?img=1",
-                "https://i.pravatar.cc/100?img=2",
-                "https://i.pravatar.cc/100?img=3",
-              ].map((src) => (
-                <img
-                  key={src}
-                  src={src}
-                  alt=""
-                  className="w-8 h-8 rounded-full border-2 border-[#1e3456] object-cover"
-                />
+                {
+                  title: "Publica y atrae mejor",
+                  desc: "Crea vacantes con una propuesta clara y coherente con tu marca empleadora.",
+                },
+                {
+                  title: "Centraliza tu proceso",
+                  desc: "Un solo lugar para organizar candidatos, conversaciones y próximos pasos.",
+                },
+                {
+                  title: "Decide con más claridad",
+                  desc: "Menos ruido, más contexto: prioriza lo importante y acelera decisiones.",
+                },
+              ].map((b) => (
+                <div key={b.title} className="rounded-2xl bg-white/5 border border-white/10 p-5">
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 w-9 h-9 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                        className="text-white/85"
+                      >
+                        <path d="M20 6 9 17l-5-5" />
+                      </svg>
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-white">{b.title}</p>
+                      <p className="mt-1 text-xs text-blue-100/80 leading-relaxed">{b.desc}</p>
+                    </div>
+                  </div>
+                </div>
               ))}
             </div>
-            <span className="text-xs text-blue-100/70 font-medium">
-              Con la confianza de 450+ empresas globales
-            </span>
-          </div>
-        </div>
 
-        <div className="relative z-10 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-5 overflow-hidden">
-          <div className="absolute inset-0 z-0 opacity-20 bg-[url('https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80')] bg-cover bg-center" />
-          <div className="absolute inset-0 bg-gradient-to-r from-[#1e3456] via-[#1e3456]/80 to-transparent z-0" />
-
-          <div className="relative z-10 flex items-start gap-4">
-            <div className="p-2 bg-white/10 rounded-lg shrink-0 mt-0.5">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="text-blue-200"
-              >
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                <path d="m9 12 2 2 4-4" />
-              </svg>
+            <div className="mt-6 flex flex-wrap gap-2">
+              {["Startups", "Pymes", "Equipos de RRHH", "Founder-led hiring"].map((t) => (
+                <span
+                  key={t}
+                  className="text-[10px] font-semibold tracking-widest uppercase rounded-full bg-white/10 border border-white/15 px-3 py-1 text-blue-100/90"
+                >
+                  {t}
+                </span>
+              ))}
             </div>
-            <div>
-              <h3 className="text-sm font-semibold text-white mb-1">Fondo de Talento Verificado</h3>
-              <p className="text-xs text-blue-100/70 leading-relaxed">
-                Cada graduado es verificado por sus habilidades y credenciales.
+
+            <div className="mt-10 rounded-2xl bg-white/5 border border-white/10 p-6">
+              <p className="text-xs text-blue-100/80">
+                ¿Ya tienes cuenta?{" "}
+                <Link to={routes.companyLogin} className="text-white font-semibold hover:underline">
+                  Inicia sesión
+                </Link>
               </p>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <Link to={routes.login} className="w-full">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full rounded-full border-white/30 text-white hover:bg-white/10"
+                  >
+                    Login talento
+                  </Button>
+                </Link>
+                <Link to={routes.talentSignUp} className="w-full">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full rounded-full border-white/30 text-white hover:bg-white/10"
+                  >
+                    Registro talento
+                  </Button>
+                </Link>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="w-full md:w-1/2 flex items-center justify-center p-8 md:p-12 lg:p-16 bg-white">
-        <div className="w-full max-w-[420px]">
-          <h2 className="text-2xl md:text-3xl font-bold text-[#0f172a] mb-2 tracking-tight text-center md:text-left">
-            Crear Cuenta de Empresa
-          </h2>
-          <p className="text-slate-500 text-sm mb-8 text-center md:text-left">
-            Completa los detalles para comenzar a contratar a tus próximos talentos destacados.
-          </p>
+        <div className="md:col-span-7 p-10 md:p-12">
+          <div className="max-w-md mx-auto">
+            <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-[#111827]">
+              Registro
+            </h2>
+            <p className="mt-2 text-sm text-slate-500">
+              Crea la cuenta de tu empresa para continuar.
+            </p>
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3 text-sm text-slate-600 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <span>¿Quieres registrarte como talento?</span>
+              <div className="flex items-center gap-3">
+                <Link to={routes.talentSignUp} className="font-semibold text-[#1e3456] hover:underline">
+                  Registro talento
+                </Link>
+                <span className="text-slate-300">/</span>
+                <Link to={routes.login} className="font-semibold text-[#1e3456] hover:underline">
+                  Login talento
+                </Link>
+              </div>
+            </div>
 
           {oauthError ? (
             <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -499,10 +552,11 @@ export function SignUpCompanyPage() {
             </div>
           ) : null}
 
-          <div className="grid grid-cols-2 gap-3 mb-6">
+          <div className="grid grid-cols-2 gap-4 mt-8 mb-8">
             <button
               type="button"
-              className="flex items-center justify-center gap-2 border border-slate-200 rounded-lg py-2.5 font-medium text-slate-600 hover:bg-slate-50 transition-colors text-xs"
+              className="flex items-center justify-center gap-2 border border-slate-200 rounded-xl py-3 font-medium text-slate-600 hover:bg-slate-50 transition-colors text-sm disabled:opacity-60 disabled:pointer-events-none"
+              disabled
             >
               <svg className="w-4 h-4" fill="#0077b5" viewBox="0 0 24 24">
                 <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
@@ -511,11 +565,11 @@ export function SignUpCompanyPage() {
             </button>
             <button
               type="button"
-              className="flex items-center justify-center gap-2 border border-slate-200 rounded-lg py-2.5 font-medium text-slate-600 hover:bg-slate-50 transition-colors text-xs"
+              className="flex items-center justify-center gap-2 border border-slate-200 rounded-xl py-3 font-medium text-slate-600 hover:bg-slate-50 transition-colors text-sm disabled:opacity-60 disabled:pointer-events-none"
               disabled={oauthLoading || isLoading}
               onClick={startGoogleOAuth}
             >
-              <svg className="w-4 h-4" viewBox="0 0 24 24">
+              <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path
                   fill="#4285F4"
                   d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -539,14 +593,14 @@ export function SignUpCompanyPage() {
 
           <div className="flex items-center gap-3 mb-6">
             <div className="h-px bg-slate-100 flex-1" />
-            <span className="text-[9px] font-semibold text-slate-400 tracking-widest uppercase">
-              O CON CORREO
+            <span className="text-[10px] font-semibold text-slate-400 tracking-widest uppercase">
+              O continúa con correo
             </span>
             <div className="h-px bg-slate-100 flex-1" />
           </div>
 
           <form
-            className="space-y-4"
+            className="space-y-5"
             onSubmit={async (e) => {
               e.preventDefault();
               setSubmitAttempted(true);
@@ -563,7 +617,7 @@ export function SignUpCompanyPage() {
             }}
           >
             <div>
-              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5">
+              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-2">
                 Nombre de la Empresa
               </label>
               <Input
@@ -573,7 +627,7 @@ export function SignUpCompanyPage() {
                 onChange={(e) => setCompanyName(e.target.value)}
                 aria-invalid={Boolean(companyNameError) || undefined}
                 className={[
-                  "bg-[#f8fafc] rounded-lg focus:ring-[#1e3456]/20",
+                  "bg-[#f3f5f8] rounded-xl focus:ring-[#1e3456]/20 placeholder:text-slate-400 text-sm border border-transparent focus:border-transparent",
                   companyNameError ? "ring-2 ring-red-200" : null,
                 ].join(" ")}
                 disabled={isLoading}
@@ -582,7 +636,7 @@ export function SignUpCompanyPage() {
             </div>
 
             <div>
-              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5">
+              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-2">
                 Correo de Trabajo
               </label>
               <Input
@@ -592,7 +646,7 @@ export function SignUpCompanyPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 aria-invalid={Boolean(emailError) || undefined}
                 className={[
-                  "bg-[#f8fafc] rounded-lg focus:ring-[#1e3456]/20",
+                  "bg-[#f3f5f8] rounded-xl focus:ring-[#1e3456]/20 placeholder:text-slate-400 text-sm border border-transparent focus:border-transparent",
                   emailError ? "ring-2 ring-red-200" : null,
                 ].join(" ")}
                 disabled={isLoading}
@@ -601,7 +655,7 @@ export function SignUpCompanyPage() {
             </div>
 
             <div>
-              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5">
+              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-2">
                 Tamaño de la Empresa
               </label>
               <div className="relative">
@@ -609,7 +663,7 @@ export function SignUpCompanyPage() {
                   value={companySize}
                   onChange={(e) => setCompanySize(e.target.value)}
                   className={[
-                    "appearance-none pr-10",
+                    "appearance-none pr-10 bg-[#f3f5f8] rounded-xl",
                     companySizeError ? "ring-2 ring-red-200" : null,
                   ].join(" ")}
                   disabled={isLoading}
@@ -643,7 +697,7 @@ export function SignUpCompanyPage() {
             </div>
 
             <div>
-              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5">
+              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-2">
                 Contraseña
               </label>
               <PasswordField
@@ -651,7 +705,7 @@ export function SignUpCompanyPage() {
                 onChange={(v) => setPassword(v)}
                 placeholder="Mín. 8 caracteres"
                 className={[
-                  "bg-[#f8fafc] rounded-lg focus:ring-[#1e3456]/20",
+                  "bg-[#f3f5f8] rounded-xl focus:ring-[#1e3456]/20 placeholder:text-slate-400 text-sm border border-transparent focus:border-transparent",
                   passwordError ? "ring-2 ring-red-200" : null,
                 ].join(" ")}
                 disabled={isLoading}
@@ -666,7 +720,7 @@ export function SignUpCompanyPage() {
             </div>
 
             <div>
-              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5">
+              <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-2">
                 Confirmar Contraseña
               </label>
               <PasswordField
@@ -674,7 +728,7 @@ export function SignUpCompanyPage() {
                 onChange={(v) => setConfirmPassword(v)}
                 placeholder="Repite tu contraseña"
                 className={[
-                  "bg-[#f8fafc] rounded-lg focus:ring-[#1e3456]/20",
+                  "bg-[#f3f5f8] rounded-xl focus:ring-[#1e3456]/20 placeholder:text-slate-400 text-sm border border-transparent focus:border-transparent",
                   confirmError ? "ring-2 ring-red-200" : null,
                 ].join(" ")}
                 disabled={isLoading}
@@ -701,7 +755,7 @@ export function SignUpCompanyPage() {
             <Button
               type="submit"
               disabled={isSubmitDisabled}
-              className="w-full bg-[#243f65] hover:bg-[#15263d] shadow-md shadow-[#243f65]/20 rounded-lg py-3 text-sm"
+              className="w-full rounded-xl py-3.5"
             >
               {isLoading ? "Creando..." : "Crear Cuenta de Empresa"}
             </Button>
@@ -709,7 +763,7 @@ export function SignUpCompanyPage() {
 
           <p className="text-center text-xs text-slate-500 mt-8">
             ¿Ya tienes una cuenta de empresa?{" "}
-            <Link to={routes.portal} className="text-[#1e3456] font-semibold hover:underline">
+            <Link to={routes.companyLogin} className="text-[#1e3456] font-semibold hover:underline">
               Iniciar sesión
             </Link>
           </p>
@@ -739,6 +793,7 @@ export function SignUpCompanyPage() {
           </div>
         </div>
       </div>
+    </div>
     </div>
   );
 }

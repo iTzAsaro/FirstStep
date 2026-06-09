@@ -86,7 +86,17 @@ export class AuthService {
   }
 
   async loginWithGoogle(params: { supabaseAccessToken: string; role: Role }) {
-    const claims = await verifySupabaseAccessToken(this.env, params.supabaseAccessToken);
+    const withStage = (stage: string, error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      return new Error(`[oauth-login-500:${stage}] ${message}`);
+    };
+
+    let claims: any;
+    try {
+      claims = await verifySupabaseAccessToken(this.env, params.supabaseAccessToken);
+    } catch (error) {
+      throw withStage("verify-supabase-token", error);
+    }
 
     const supabaseUserId = String(claims?.sub ?? "");
     const email = typeof claims?.email === "string" ? claims.email : "";
@@ -94,10 +104,19 @@ export class AuthService {
       throw Errors.unauthorized("Token inválido.");
     }
 
-    let user = await this.users.findBySupabaseUserId(supabaseUserId);
-    if (!user) {
-      await this.users.attachSupabaseUserIdByEmail(email, supabaseUserId);
+    let user;
+    try {
       user = await this.users.findBySupabaseUserId(supabaseUserId);
+    } catch (error) {
+      throw withStage("find-user-by-supabase-id", error);
+    }
+    if (!user) {
+      try {
+        await this.users.attachSupabaseUserIdByEmail(email, supabaseUserId);
+        user = await this.users.findBySupabaseUserId(supabaseUserId);
+      } catch (error) {
+        throw withStage("attach-user-by-email", error);
+      }
     }
 
     if (user && user.role !== params.role) {
@@ -107,18 +126,22 @@ export class AuthService {
     }
 
     if (!user) {
-      const passwordHash = await bcrypt.hash(crypto.randomUUID(), this.env.bcryptRounds);
-      user = await this.users.createWithSupabaseUserId({
-        email,
-        role: params.role,
-        passwordHash,
-        supabaseUserId,
-      });
+      try {
+        const passwordHash = await bcrypt.hash(crypto.randomUUID(), this.env.bcryptRounds);
+        user = await this.users.createWithSupabaseUserId({
+          email,
+          role: params.role,
+          passwordHash,
+          supabaseUserId,
+        });
 
-      if (params.role === "talento") {
-        await this.talentProfiles.upsert(user.id, { fullName: email.split("@")[0] });
-      } else {
-        await this.companyProfiles.upsert(user.id, { companyName: email.split("@")[0] });
+        if (params.role === "talento") {
+          await this.talentProfiles.upsert(user.id, { fullName: email.split("@")[0] });
+        } else {
+          await this.companyProfiles.upsert(user.id, { companyName: email.split("@")[0] });
+        }
+      } catch (error) {
+        throw withStage("create-user-from-google", error);
       }
     }
 

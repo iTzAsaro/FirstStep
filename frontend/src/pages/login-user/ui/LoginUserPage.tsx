@@ -22,13 +22,24 @@ export function LoginUserPage() {
   const { loginWithEmail, loginWithPassword, isLoading, error, clearError } = useLoginTalent();
 
   const normalizeSupabaseUrl = (raw: string) => {
-    const v = raw.trim();
+    const v = raw.trim().replace("xkhlhawelqtmxcoqznup.supabase.co", "xhklhawelqtmxcoqznup.supabase.co");
     if (!v) return "";
     try {
       const u = new URL(v);
       return `${u.protocol}//${u.host}`;
     } catch {
       return v.replace(/\/rest\/v1(\/.*)?$/i, "").replace(/\/+$/g, "");
+    }
+  };
+  const readEmailFromJwt = (token: string) => {
+    try {
+      const [, payload] = token.split(".");
+      if (!payload) return null;
+      const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+      const parsed = JSON.parse(json) as { email?: unknown };
+      return typeof parsed.email === "string" ? parsed.email : null;
+    } catch {
+      return null;
     }
   };
 
@@ -53,6 +64,13 @@ export function LoginUserPage() {
   const supabaseConfigured = Boolean(normalizedSupabaseUrl && supabaseAnonKey.trim());
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!normalizedSupabaseUrl || normalizedSupabaseUrl === supabaseUrl) return;
+    setSupabaseUrl(normalizedSupabaseUrl);
+    localStorage.setItem("firststep.supabase.url", normalizedSupabaseUrl);
+  }, [normalizedSupabaseUrl, supabaseUrl]);
+
+  useEffect(() => {
     const url = new URL(window.location.href);
     const code = url.searchParams.get("code");
     const searchErrorRaw = url.searchParams.get("error_description") ?? url.searchParams.get("error") ?? null;
@@ -60,7 +78,6 @@ export function LoginUserPage() {
     const searchError = searchErrorRaw ? decodeURIComponent(searchErrorRaw) : null;
     const hashParams = new URLSearchParams(window.location.hash.startsWith("#") ? window.location.hash.slice(1) : "");
     const hashAccessToken = hashParams.get("access_token");
-    const hashRefreshToken = hashParams.get("refresh_token");
     const hashErrorRaw = hashParams.get("error_description") ?? hashParams.get("error") ?? null;
     const hashError = hashErrorRaw ? decodeURIComponent(hashErrorRaw) : null;
     const urlError = searchError ?? hashError;
@@ -84,23 +101,23 @@ export function LoginUserPage() {
         }
 
         const supabase = createClient(normalizedSupabaseUrl, supabaseAnonKey.trim());
+        let accessToken: string | null = null;
+        let userEmail: string | null = null;
         if (code) {
           const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-          if (exchangeError) throw exchangeError;
-        } else if (hashAccessToken && hashRefreshToken) {
-          const { error } = await supabase.auth.setSession({
-            access_token: hashAccessToken,
-            refresh_token: hashRefreshToken,
-          });
-          if (error) throw error;
+          if (exchangeError) throw new Error(`[oauth:exchange-code] ${exchangeError.message}`);
+          const { data, error: sessionReadError } = await supabase.auth.getSession();
+          if (sessionReadError) throw new Error(`[oauth:get-session] ${sessionReadError.message}`);
+          const session = data.session;
+          accessToken = session?.access_token ?? null;
+          userEmail = session?.user?.email ?? null;
+        } else if (hashAccessToken) {
+          accessToken = hashAccessToken;
+          userEmail = readEmailFromJwt(hashAccessToken);
+          if (!userEmail) throw new Error("[oauth:decode-token-email] No se pudo leer el email desde el token OAuth.");
         } else {
           throw new Error("Respuesta OAuth incompleta.");
         }
-
-        const { data } = await supabase.auth.getSession();
-        const session = data.session;
-        const accessToken = session?.access_token;
-        const userEmail = session?.user?.email ?? null;
 
         if (accessToken) {
           const res = await fetch("/api/auth/login/oauth", {
@@ -171,7 +188,7 @@ export function LoginUserPage() {
           provider: "google",
           options: { redirectTo },
         });
-        if (error) throw error;
+        if (error) throw new Error(`[oauth:start-google] ${error.message}`);
         return;
       }
 
@@ -185,7 +202,10 @@ export function LoginUserPage() {
         if (!error) return;
         lastErr = error;
       }
-      throw lastErr instanceof Error ? lastErr : new Error("No se pudo iniciar sesión con LinkedIn.");
+      if (lastErr instanceof Error) {
+        throw new Error(`[oauth:start-linkedin] ${lastErr.message}`);
+      }
+      throw new Error("[oauth:start-linkedin] No se pudo iniciar sesión con LinkedIn.");
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setOauthError(msg);
@@ -236,7 +256,7 @@ export function LoginUserPage() {
               </div>
               <div>
                 <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-2">
-                  Supabase Anon Key
+                  Supabase Publishable Key
                 </label>
                 <Input
                   type="password"
@@ -326,6 +346,18 @@ export function LoginUserPage() {
             <p className="text-slate-500 text-sm mb-8">
               Bienvenido de nuevo. Por favor ingresa tus datos para continuar.
             </p>
+            <div className="mb-8 rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3 text-sm text-slate-600 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <span>¿Eres empresa?</span>
+              <div className="flex items-center gap-3">
+                <Link to={routes.companyLogin} className="font-semibold text-[#1e3456] hover:underline">
+                  Iniciar sesión
+                </Link>
+                <span className="text-slate-300">/</span>
+                <Link to={routes.companySignUp} className="font-semibold text-[#1e3456] hover:underline">
+                  Registrarte
+                </Link>
+              </div>
+            </div>
 
             <div className="grid grid-cols-2 gap-4 mb-8">
               <button
@@ -439,6 +471,10 @@ export function LoginUserPage() {
               ¿No tienes una cuenta?{" "}
               <Link to={routes.talentSignUp} className="text-[#5d85c4] font-semibold hover:underline">
                 Regístrate
+              </Link>
+              <span className="text-slate-300 mx-2">·</span>
+              <Link to={routes.companySignUp} className="text-[#5d85c4] font-semibold hover:underline">
+                Soy empresa
               </Link>
             </p>
 

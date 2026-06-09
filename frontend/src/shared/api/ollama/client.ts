@@ -51,10 +51,10 @@ function isAbortError(err: unknown) {
  * Normaliza el baseUrl.
  *
  * En desarrollo usa el proxy de Vite (/ollama).
- * En producción apunta a http://localhost:11434 (Ollama local).
+ * En producción usa el proxy del servidor (/ollama).
  */
 function normalizeBaseUrl(baseUrl?: string) {
-  const fallback = import.meta.env.DEV ? "/ollama" : "http://localhost:11434";
+  const fallback = "/ollama";
   return baseUrl?.replace(/\/+$/, "") ?? fallback;
 }
 

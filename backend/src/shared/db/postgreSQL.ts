@@ -22,6 +22,17 @@ export type Db = {
   queryMany<T = any>(sqlText: string, binds?: Record<string, any>): Promise<T[]>;
 };
 
+function resolveSslMode(databaseUrl: string) {
+  try {
+    const url = new URL(databaseUrl);
+    const host = url.hostname.trim().toLowerCase();
+    if (["db", "localhost", "127.0.0.1"].includes(host)) return false;
+  } catch {
+    // Si la URL no se puede parsear, mantener el comportamiento seguro por defecto.
+  }
+  return "require" as const;
+}
+
 function compileNamedBinds(sqlText: string, binds: Record<string, any>) {
   const values: any[] = [];
   const nameToIndex = new Map<string, number>();
@@ -55,8 +66,8 @@ function compileNamedBinds(sqlText: string, binds: Record<string, any>) {
 export async function createDb(env: Env): Promise<Db> {
   if (!env.databaseUrl) throw new Error("Falta DATABASE_URL.");
 
-  // Forzar family: 4 para que postgres.js use IPv4 aunque DNS devuelva IPv6
-  const sql = postgres(env.databaseUrl, { ssl: "require" });
+  // Supabase remoto necesita TLS; el Postgres local de Docker no.
+  const sql = postgres(env.databaseUrl, { ssl: resolveSslMode(env.databaseUrl) });
 
   if (env.dbTestOnStartup) {
     try {
