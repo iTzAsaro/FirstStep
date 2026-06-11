@@ -100,6 +100,8 @@ export async function createDb(env: Env): Promise<Db> {
     await sql.unsafe(`ALTER TABLE IF EXISTS company_profiles ADD COLUMN IF NOT EXISTS industry VARCHAR(200)`, []);
     await sql.unsafe(`ALTER TABLE IF EXISTS company_profiles ADD COLUMN IF NOT EXISTS activity_sector VARCHAR(200)`, []);
     await sql.unsafe(`ALTER TABLE IF EXISTS company_profiles ADD COLUMN IF NOT EXISTS location VARCHAR(200)`, []);
+    await sql.unsafe(`ALTER TABLE IF EXISTS company_profiles ADD COLUMN IF NOT EXISTS address VARCHAR(300)`, []);
+    await sql.unsafe(`ALTER TABLE IF EXISTS company_profiles ADD COLUMN IF NOT EXISTS contact_email VARCHAR(320)`, []);
     await sql.unsafe(`ALTER TABLE IF EXISTS company_profiles ADD COLUMN IF NOT EXISTS website VARCHAR(300)`, []);
     await sql.unsafe(`ALTER TABLE IF EXISTS company_profiles ADD COLUMN IF NOT EXISTS description VARCHAR(2000)`, []);
     await sql.unsafe(`ALTER TABLE IF EXISTS company_profiles ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20)`, []);

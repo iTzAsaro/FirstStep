@@ -58,6 +58,8 @@ CREATE TABLE company_profiles (
   industry VARCHAR(200),
   activity_sector VARCHAR(200),
   location VARCHAR(200),
+  address VARCHAR(300),
+  contact_email VARCHAR(320),
   website VARCHAR(300),
   description VARCHAR(2000),
   verification_status VARCHAR(20) NOT NULL DEFAULT 'pending'

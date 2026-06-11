@@ -17,6 +17,8 @@ export type CompanyProfile = {
   industry: string | null;
   activitySector: string | null;
   location: string | null;
+  address: string | null;
+  contactEmail: string | null;
   website: string | null;
   description: string | null;
   verificationStatus: "pending" | "verified";

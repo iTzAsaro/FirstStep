@@ -13,7 +13,7 @@ import { JobRepository } from "../modules/jobs/jobRepository";
 import { authenticate } from "../shared/http/middleware/authenticate";
 import { requireRole } from "../shared/http/middleware/requireRole";
 import { Errors } from "../shared/http/middleware/errorHandler";
-import { asNumberId, oneOf, optionalString, requiredString } from "../shared/validation/validators";
+import { asNumberId, email, oneOf, optionalString, requiredString } from "../shared/validation/validators";
 
 /**
  * Rutas de empresa:
@@ -26,8 +26,54 @@ export function createCompanyRouter(ctx: AppContext) {
   const router = Router();
   const repo = new CompanyProfileRepository(ctx.db);
   const jobs = new JobRepository(ctx.db);
+  const siiEndpoint = "https://api.baseapi.cl/api/v1/sii/contribuyente/situacion-tributaria";
 
   router.use(authenticate(ctx.env), requireRole("empresa"));
+
+  function normalizeRut(raw: string) {
+    return raw.replace(/\./g, "").replace(/\s+/g, "").toUpperCase();
+  }
+
+  function isRutFormatValid(raw: string) {
+    const normalized = normalizeRut(raw);
+    return /^\d{7,8}-[\dK]$/.test(normalized);
+  }
+
+  async function validateRutWithSii(rawRut: string) {
+    const rut = normalizeRut(rawRut);
+    if (!isRutFormatValid(rut)) {
+      throw Errors.badRequest("El RUT debe tener formato válido, por ejemplo 12.345.678-5.");
+    }
+    if (!ctx.env.apiBaseSiiKey) {
+      throw new Error("La validación tributaria no está configurada en el servidor.");
+    }
+
+    const res = await fetch(siiEndpoint, {
+      method: "POST",
+      headers: {
+        "X-API-Key": ctx.env.apiBaseSiiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ rut }),
+    });
+
+    let data: any = null;
+    try {
+      data = await res.json();
+    } catch {}
+
+    if (!res.ok) {
+      const detail =
+        typeof data?.message === "string" && data.message
+          ? data.message
+          : typeof data?.error === "string" && data.error
+            ? data.error
+            : `No se pudo validar el RUT en SII (${res.status}).`;
+      throw Errors.badRequest(detail);
+    }
+
+    return { rut, data };
+  }
 
   function parseOptionalInt(value: unknown, field: string) {
     if (value === undefined) return undefined;
@@ -63,10 +109,27 @@ export function createCompanyRouter(ctx: AppContext) {
     }
   });
 
+  router.post("/validate-rut", async (req, res, next) => {
+    try {
+      if (!req.auth) throw Errors.unauthorized();
+      const body = req.body ?? {};
+      const rut = requiredString(body.rut, "rut");
+      const out = await validateRutWithSii(rut);
+      return res.json({
+        valid: true,
+        rut: out.rut,
+        result: out.data,
+      });
+    } catch (e) {
+      return next(e);
+    }
+  });
+
   router.put("/profile", async (req, res, next) => {
     try {
       if (!req.auth) throw Errors.unauthorized();
       const body = req.body ?? {};
+      const contactEmail = body.contactEmail === undefined ? undefined : body.contactEmail === null ? null : email(body.contactEmail, "contactEmail");
       const profile = await repo.upsert(req.auth.id, {
         companyName: optionalString(body.companyName, "companyName"),
         legalName: optionalString(body.legalName, "legalName"),
@@ -75,6 +138,8 @@ export function createCompanyRouter(ctx: AppContext) {
         industry: optionalString(body.industry, "industry"),
         activitySector: optionalString(body.activitySector, "activitySector"),
         location: optionalString(body.location, "location"),
+        address: optionalString(body.address, "address"),
+        contactEmail,
         website: optionalString(body.website, "website"),
         description: optionalString(body.description, "description"),
         verificationStatus: body.verificationStatus ? oneOf(body.verificationStatus, "verificationStatus", ["pending", "verified"] as const) : undefined,
@@ -94,15 +159,19 @@ export function createCompanyRouter(ctx: AppContext) {
       if (!acceptedCompanyTerms || !verificationConfirmed) {
         throw Errors.badRequest("Debes verificar los datos empresariales y aceptar los términos específicos.");
       }
+      const rawRut = requiredString(body.taxId, "taxId");
+      const validatedRut = await validateRutWithSii(rawRut);
 
       const profile = await repo.upsert(req.auth.id, {
         companyName: requiredString(body.companyName, "companyName"),
         legalName: requiredString(body.legalName, "legalName"),
-        taxId: requiredString(body.taxId, "taxId"),
+        taxId: validatedRut.rut,
         companySize: requiredString(body.companySize, "companySize"),
         industry: requiredString(body.industry, "industry"),
         activitySector: requiredString(body.activitySector, "activitySector"),
         location: requiredString(body.location, "location"),
+        address: requiredString(body.address, "address"),
+        contactEmail: email(body.contactEmail, "contactEmail"),
         website: optionalString(body.website, "website"),
         description: requiredString(body.description, "description"),
         verificationStatus: "verified",

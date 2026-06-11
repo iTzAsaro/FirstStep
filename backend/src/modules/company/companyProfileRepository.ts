@@ -19,6 +19,8 @@ export type UpsertCompanyProfileInput = Partial<
     | "industry"
     | "activitySector"
     | "location"
+    | "address"
+    | "contactEmail"
     | "website"
     | "description"
     | "verificationStatus"
@@ -48,6 +50,8 @@ export class CompanyProfileRepository {
               industry,
               activity_sector as "activitySector",
               location,
+              address,
+              contact_email as "contactEmail",
               website,
               description,
               verification_status as "verificationStatus",
@@ -76,6 +80,8 @@ export class CompanyProfileRepository {
       industry: input.industry ?? current?.industry ?? null,
       activitySector: input.activitySector ?? current?.activitySector ?? null,
       location: input.location ?? current?.location ?? null,
+      address: input.address ?? current?.address ?? null,
+      contactEmail: input.contactEmail ?? current?.contactEmail ?? null,
       website: input.website ?? current?.website ?? null,
       description: input.description ?? current?.description ?? null,
       verificationStatus: input.verificationStatus ?? current?.verificationStatus ?? "pending",
@@ -85,9 +91,9 @@ export class CompanyProfileRepository {
 
     await this.db.execute(
       `INSERT INTO company_profiles
-        (user_id, company_name, legal_name, tax_id, company_size, industry, activity_sector, location, website, description, verification_status, verification_acknowledged_at, accepted_company_terms_at, created_at, updated_at)
+        (user_id, company_name, legal_name, tax_id, company_size, industry, activity_sector, location, address, contact_email, website, description, verification_status, verification_acknowledged_at, accepted_company_terms_at, created_at, updated_at)
        VALUES
-        (:userId, :companyName, :legalName, :taxId, :companySize, :industry, :activitySector, :location, :website, :description, :verificationStatus, :verificationAcknowledgedAt, :acceptedCompanyTermsAt, NOW(), NOW())
+        (:userId, :companyName, :legalName, :taxId, :companySize, :industry, :activitySector, :location, :address, :contactEmail, :website, :description, :verificationStatus, :verificationAcknowledgedAt, :acceptedCompanyTermsAt, NOW(), NOW())
        ON CONFLICT (user_id) DO UPDATE SET
         company_name = EXCLUDED.company_name,
         legal_name = EXCLUDED.legal_name,
@@ -96,6 +102,8 @@ export class CompanyProfileRepository {
         industry = EXCLUDED.industry,
         activity_sector = EXCLUDED.activity_sector,
         location = EXCLUDED.location,
+        address = EXCLUDED.address,
+        contact_email = EXCLUDED.contact_email,
         website = EXCLUDED.website,
         description = EXCLUDED.description,
         verification_status = EXCLUDED.verification_status,
@@ -117,6 +125,8 @@ export class CompanyProfileRepository {
         profile.companySize &&
         profile.activitySector &&
         profile.location &&
+        profile.address &&
+        profile.contactEmail &&
         profile.description &&
         profile.verificationAcknowledgedAt &&
         profile.acceptedCompanyTermsAt,

@@ -20,6 +20,7 @@ export type Env = {
   supabaseJwtSecret: string | null;
   supabaseJwksUrl: string | null;
   supabaseJwksBase64: string | null;
+  apiBaseSiiKey: string | null;
 };
 
 /**
@@ -139,6 +140,7 @@ export function loadEnv(): Env {
   const supabaseJwtSecret = readOptional("SUPABASE_JWT_SECRET");
   const supabaseJwksUrl = readOptional("SUPABASE_JWKS_URL");
   const supabaseJwksBase64 = readOptional("SUPABASE_JWKS_BASE64");
+  const apiBaseSiiKey = readOptional("API_BASE_SII_KEY");
 
   return {
     port,
@@ -152,5 +154,6 @@ export function loadEnv(): Env {
     supabaseJwtSecret,
     supabaseJwksUrl,
     supabaseJwksBase64,
+    apiBaseSiiKey,
   };
 }
