@@ -14,6 +14,7 @@ import { createAuthRouter } from "./auth";
 import { createCatalogRouter } from "./catalog";
 import { createCompanyRouter } from "./company";
 import { createCvRouter } from "./cv";
+import { createFilesRouter } from "./files";
 import { createTalentRouter } from "./talent";
 
 /**
@@ -23,6 +24,7 @@ import { createTalentRouter } from "./talent";
 export function createApiRouter(ctx: AppContext) {
   const router = Router();
 
+  router.use(createFilesRouter(ctx));
   router.use("/auth", createAuthRouter(ctx));
   router.use("/catalog", createCatalogRouter(ctx));
   router.use("/talent", createTalentRouter(ctx));

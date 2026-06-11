@@ -223,7 +223,61 @@ export function createTalentRouter(ctx: AppContext) {
       const body = req.body ?? {};
       const coverLetter = optionalString(body.coverLetter, "coverLetter");
       const application = await jobs.apply(jobId, req.auth.id, coverLetter);
+      if (!application) {
+        throw Errors.badRequest("No se puede postular a esta oportunidad (estado o fecha límite).");
+      }
       return res.status(201).json({ application });
+    } catch (e) {
+      return next(e);
+    }
+  });
+
+  router.get("/conversations", async (req, res, next) => {
+    try {
+      if (!req.auth) throw Errors.unauthorized();
+      const conversations = await jobs.listConversationsForTalent(req.auth.id);
+      return res.json({ conversations });
+    } catch (e) {
+      return next(e);
+    }
+  });
+
+  router.get("/conversations/:id/messages", async (req, res, next) => {
+    try {
+      if (!req.auth) throw Errors.unauthorized();
+      const conversationId = asNumberId(req.params.id, "id");
+      const conversation = await jobs.getConversationForTalent(req.auth.id, conversationId);
+      if (!conversation) throw Errors.notFound("Conversación no encontrada.");
+      const messages = await jobs.listMessagesForConversation(conversationId);
+      return res.json({ conversation, messages });
+    } catch (e) {
+      return next(e);
+    }
+  });
+
+  router.post("/conversations/:id/messages", async (req, res, next) => {
+    try {
+      if (!req.auth) throw Errors.unauthorized();
+      const conversationId = asNumberId(req.params.id, "id");
+      const conversation = await jobs.getConversationForTalent(req.auth.id, conversationId);
+      if (!conversation) throw Errors.notFound("Conversación no encontrada.");
+      const body = req.body ?? {};
+      const scheduledInterviewAtRaw = optionalString(body.scheduledInterviewAt, "scheduledInterviewAt");
+      let scheduledInterviewAt: string | null = null;
+      if (scheduledInterviewAtRaw) {
+        const parsed = new Date(scheduledInterviewAtRaw);
+        if (!Number.isFinite(parsed.getTime())) {
+          throw Errors.badRequest("Campo 'scheduledInterviewAt' es inválido.");
+        }
+        scheduledInterviewAt = parsed.toISOString();
+      }
+      const message = await jobs.createMessageForConversation(conversationId, req.auth.id, {
+        body: requiredString(body.body, "body"),
+        attachmentName: optionalString(body.attachmentName, "attachmentName"),
+        attachmentUrl: optionalString(body.attachmentUrl, "attachmentUrl"),
+        scheduledInterviewAt,
+      });
+      return res.status(201).json({ message });
     } catch (e) {
       return next(e);
     }
