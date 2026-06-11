@@ -61,7 +61,7 @@ export function useCompanyLogin() {
           throw new Error(message);
         }
 
-        const out = (await res.json()) as { accessToken?: string; user?: { role?: string } };
+        const out = (await res.json()) as { accessToken?: string; user?: { role?: string }; onboardingCompleted?: boolean };
         if (out?.user?.role !== "empresa") {
           localStorage.removeItem("firststep.api.accessToken");
           throw new Error("Esta cuenta no es de empresa. Inicia sesión en /login o usa un correo distinto para empresa.");
@@ -71,8 +71,9 @@ export function useCompanyLogin() {
         if (!token) throw new Error("No hay sesión válida. Vuelve a iniciar sesión.");
 
         const companyName = await getCompanyNameFromProfile(token, payload.email);
-        session.loginCompany({ companyName, email: payload.email });
-        navigate(routes.companyDashboard);
+        const onboardingCompleted = out.onboardingCompleted === true;
+        session.loginCompany({ companyName, email: payload.email, onboardingCompleted });
+        navigate(onboardingCompleted ? routes.companyDashboard : routes.companyOnboarding);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         setError(msg);
@@ -98,8 +99,13 @@ export function useCompanyLogin() {
           throw new Error("Esta cuenta no es de empresa. Inicia sesión en /login o usa un correo distinto para empresa.");
         }
         const companyName = await getCompanyNameFromProfile(token, payload.email);
-        session.loginCompany({ companyName, email: payload.email });
-        navigate(routes.companyDashboard);
+        const profileRes = await fetch("/api/company/profile", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const profileOut = profileRes.ok ? ((await profileRes.json()) as any) : null;
+        const onboardingCompleted = profileOut?.onboardingCompleted === true;
+        session.loginCompany({ companyName, email: payload.email, onboardingCompleted });
+        navigate(onboardingCompleted ? routes.companyDashboard : routes.companyOnboarding);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         setError(msg);

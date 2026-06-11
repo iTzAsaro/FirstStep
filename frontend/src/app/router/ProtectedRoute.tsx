@@ -8,6 +8,7 @@
 import type { ReactNode } from "react";
 
 import { Navigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
 import type { SessionRole } from "@/entities/session";
 import { useSession } from "@/entities/session";
@@ -15,12 +16,13 @@ import { routes } from "@/shared/config/routes";
 
 export function ProtectedRoute({
   children,
-  role,
+  requiredRole,
 }: {
   children: ReactNode;
-  role?: SessionRole;
+  requiredRole?: SessionRole;
 }) {
   const session = useSession();
+  const location = useLocation();
 
   /**
    * Si no hay sesión, redirige al portal.
@@ -32,8 +34,20 @@ export function ProtectedRoute({
   /**
    * Si hay rol requerido y no coincide, redirige al portal.
    */
-  if (role && session.role !== role) {
+  if (requiredRole && session.role !== requiredRole) {
     return <Navigate to={routes.portal} replace />;
+  }
+
+  if (requiredRole === "talento" && session.role === "talento" && !session.onboardingCompleted) {
+    if (location.pathname !== routes.onboarding) {
+      return <Navigate to={routes.onboarding} replace />;
+    }
+  }
+
+  if (requiredRole === "empresa" && session.role === "empresa" && !session.onboardingCompleted) {
+    if (location.pathname !== routes.companyOnboarding) {
+      return <Navigate to={routes.companyOnboarding} replace />;
+    }
   }
 
   return children;

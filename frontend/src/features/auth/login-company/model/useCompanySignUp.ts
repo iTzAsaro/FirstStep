@@ -64,11 +64,12 @@ export function useCompanySignUp() {
           throw new Error(message);
         }
 
-        const out = (await res.json()) as { accessToken?: string };
+        const out = (await res.json()) as { accessToken?: string; onboardingCompleted?: boolean };
         if (out.accessToken) localStorage.setItem("firststep.api.accessToken", out.accessToken);
 
-        session.loginCompany({ companyName: payload.companyName, email: payload.email });
-        navigate(routes.companyDashboard);
+        const onboardingCompleted = out.onboardingCompleted === true;
+        session.loginCompany({ companyName: payload.companyName, email: payload.email, onboardingCompleted });
+        navigate(onboardingCompleted ? routes.companyDashboard : routes.companyOnboarding);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         setError(msg);

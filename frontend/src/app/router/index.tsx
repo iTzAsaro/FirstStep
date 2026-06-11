@@ -17,6 +17,8 @@ import { LandingPage } from "@/pages/landing";
 import { LoginCompanyPage } from "@/pages/login-company";
 import { LoginPortalPage } from "@/pages/login-portal";
 import { LoginUserPage } from "@/pages/login-user";
+import { TalentMessagesPage } from "@/pages/messages-talent/ui/TalentMessagesPage";
+import { CompanyOnboardingPage } from "@/pages/onboarding-company/ui/CompanyOnboardingPage";
 import { OnboardingUserPage } from "@/pages/onboarding-user";
 import { OpportunitiesUserPage } from "@/pages/opportunities-user";
 import { SignUpCompanyPage } from "@/pages/signup-company";
@@ -38,9 +40,17 @@ export function AppRouter() {
       <Route path={routes.companyLogin} element={<LoginCompanyPage />} />
       <Route path={routes.companySignUp} element={<SignUpCompanyPage />} />
       <Route
+        path={routes.companyOnboarding}
+        element={
+          <ProtectedRoute requiredRole="empresa">
+            <CompanyOnboardingPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path={routes.companyDashboard}
         element={
-          <ProtectedRoute role="empresa">
+          <ProtectedRoute requiredRole="empresa">
             <DashboardCompanyPage />
           </ProtectedRoute>
         }
@@ -48,7 +58,7 @@ export function AppRouter() {
       <Route
         path={routes.onboarding}
         element={
-          <ProtectedRoute role="talento">
+          <ProtectedRoute requiredRole="talento">
             <OnboardingUserPage />
           </ProtectedRoute>
         }
@@ -56,7 +66,7 @@ export function AppRouter() {
       <Route
         path={routes.dashboard}
         element={
-          <ProtectedRoute role="talento">
+          <ProtectedRoute requiredRole="talento">
             <DashboardUserPage />
           </ProtectedRoute>
         }
@@ -64,7 +74,7 @@ export function AppRouter() {
       <Route
         path={routes.opportunities}
         element={
-          <ProtectedRoute role="talento">
+          <ProtectedRoute requiredRole="talento">
             <OpportunitiesUserPage />
           </ProtectedRoute>
         }
@@ -72,7 +82,7 @@ export function AppRouter() {
       <Route
         path={routes.cvBuilder}
         element={
-          <ProtectedRoute role="talento">
+          <ProtectedRoute requiredRole="talento">
             <CvBuilderPage />
           </ProtectedRoute>
         }
@@ -80,15 +90,23 @@ export function AppRouter() {
       <Route
         path={routes.chat}
         element={
-          <ProtectedRoute role="talento">
+          <ProtectedRoute requiredRole="talento">
             <ChatPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path={routes.messages}
+        element={
+          <ProtectedRoute requiredRole="talento">
+            <TalentMessagesPage />
           </ProtectedRoute>
         }
       />
       <Route
         path={routes.interview}
         element={
-          <ProtectedRoute role="talento">
+          <ProtectedRoute requiredRole="talento">
             <InterviewPage />
           </ProtectedRoute>
         }

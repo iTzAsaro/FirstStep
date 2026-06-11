@@ -26,7 +26,7 @@ export type SessionState = {
  */
 export type SessionApi = SessionState & {
   loginTalent: (payload: { email: string; onboardingCompleted?: boolean }) => void;
-  loginCompany: (payload: { companyName: string; email: string }) => void;
+  loginCompany: (payload: { companyName: string; email: string; onboardingCompleted?: boolean }) => void;
   completeOnboarding: () => void;
   logout: () => void;
 };

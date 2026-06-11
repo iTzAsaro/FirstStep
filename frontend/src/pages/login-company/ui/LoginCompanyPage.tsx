@@ -14,6 +14,29 @@ import { useCompanyLogin } from "@/features/auth/login-company/model/useCompanyL
 import { routes } from "@/shared/config/routes";
 import { Button, Input, PasswordField } from "@/shared/ui";
 
+function normalizeSupabaseUrl(raw: string) {
+  const v = raw.trim().replace("xkhlhawelqtmxcoqznup.supabase.co", "xhklhawelqtmxcoqznup.supabase.co");
+  if (!v) return "";
+  try {
+    const u = new URL(v);
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return v.replace(/\/rest\/v1(\/.*)?$/i, "").replace(/\/+$/g, "");
+  }
+}
+
+function readEmailFromJwt(token: string) {
+  try {
+    const [, payload] = token.split(".");
+    if (!payload) return null;
+    const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+    const parsed = JSON.parse(json) as { email?: unknown };
+    return typeof parsed.email === "string" ? parsed.email : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Renderiza el formulario de login para empresas.
  * En el mock actual, el login persiste sesión local y redirige al dashboard.
@@ -24,28 +47,6 @@ export function LoginCompanyPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [oauthError, setOauthError] = useState<string | null>(null);
-
-  const normalizeSupabaseUrl = (raw: string) => {
-    const v = raw.trim().replace("xkhlhawelqtmxcoqznup.supabase.co", "xhklhawelqtmxcoqznup.supabase.co");
-    if (!v) return "";
-    try {
-      const u = new URL(v);
-      return `${u.protocol}//${u.host}`;
-    } catch {
-      return v.replace(/\/rest\/v1(\/.*)?$/i, "").replace(/\/+$/g, "");
-    }
-  };
-  const readEmailFromJwt = (token: string) => {
-    try {
-      const [, payload] = token.split(".");
-      if (!payload) return null;
-      const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
-      const parsed = JSON.parse(json) as { email?: unknown };
-      return typeof parsed.email === "string" ? parsed.email : null;
-    } catch {
-      return null;
-    }
-  };
 
   const [oauthConfigOpen, setOauthConfigOpen] = useState(false);
   const [supabaseUrl, setSupabaseUrl] = useState(() => {

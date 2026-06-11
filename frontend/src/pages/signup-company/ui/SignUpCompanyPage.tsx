@@ -23,6 +23,29 @@ const COMPANY_SIZES = [
   { value: "500+", label: "500+ empleados" },
 ];
 
+function normalizeSupabaseUrl(raw: string) {
+  const v = raw.trim();
+  if (!v) return "";
+  try {
+    const u = new URL(v);
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return v.replace(/\/rest\/v1(\/.*)?$/i, "").replace(/\/+$/g, "");
+  }
+}
+
+function readEmailFromJwt(token: string) {
+  try {
+    const [, payload] = token.split(".");
+    if (!payload) return null;
+    const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+    const parsed = JSON.parse(json) as { email?: unknown };
+    return typeof parsed.email === "string" ? parsed.email : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Renderiza el formulario de registro para empresas.
  * En el mock actual, crea una sesión local de empresa y redirige al dashboard.
@@ -31,28 +54,6 @@ export function SignUpCompanyPage() {
   const session = useSession();
   const navigate = useNavigate();
   const { signUp, isLoading, error, clearError } = useCompanySignUp();
-
-  const normalizeSupabaseUrl = (raw: string) => {
-    const v = raw.trim();
-    if (!v) return "";
-    try {
-      const u = new URL(v);
-      return `${u.protocol}//${u.host}`;
-    } catch {
-      return v.replace(/\/rest\/v1(\/.*)?$/i, "").replace(/\/+$/g, "");
-    }
-  };
-  const readEmailFromJwt = (token: string) => {
-    try {
-      const [, payload] = token.split(".");
-      if (!payload) return null;
-      const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
-      const parsed = JSON.parse(json) as { email?: unknown };
-      return typeof parsed.email === "string" ? parsed.email : null;
-    } catch {
-      return null;
-    }
-  };
 
   const [companyName, setCompanyName] = useState("");
   const [email, setEmail] = useState(() => {
@@ -221,7 +222,7 @@ export function SignUpCompanyPage() {
           throw new Error(message);
         }
 
-        const out = (await res.json()) as { accessToken?: string };
+        const out = (await res.json()) as { accessToken?: string; onboardingCompleted?: boolean };
         const backendToken = out.accessToken ?? "";
         if (!backendToken) throw new Error("El backend no devolvió accessToken.");
         localStorage.setItem("firststep.api.accessToken", backendToken);
@@ -248,10 +249,11 @@ export function SignUpCompanyPage() {
           (typeof profOut?.profile?.companyName === "string" && profOut.profile.companyName.trim()) ||
           companyName.trim() ||
           userEmail.split("@")[0];
+        const onboardingCompleted = profOut?.onboardingCompleted === true || out.onboardingCompleted === true;
 
         if (!alive) return;
-        session.loginCompany({ companyName: companyNameFromProfile, email: userEmail });
-        navigate(routes.companyDashboard);
+        session.loginCompany({ companyName: companyNameFromProfile, email: userEmail, onboardingCompleted });
+        navigate(onboardingCompleted ? routes.companyDashboard : routes.companyOnboarding);
       } catch (e) {
         if (!alive) return;
         const msg = e instanceof Error ? e.message : String(e);
@@ -298,7 +300,7 @@ export function SignUpCompanyPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f6f8fb] text-slate-800 flex items-center justify-center p-4 md:p-8">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#eef4fb_0%,#f8fafc_28%,#f8fafc_100%)] text-slate-800 flex items-center justify-center p-4 md:p-8">
       {oauthConfigOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <button type="button" className="absolute inset-0 bg-slate-950/40" onClick={() => setOauthConfigOpen(false)} />
@@ -521,14 +523,28 @@ export function SignUpCompanyPage() {
 
         <div className="md:col-span-7 p-10 md:p-12">
           <div className="max-w-md mx-auto">
-            <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-[#111827]">
-              Registro
-            </h2>
-            <p className="mt-2 text-sm text-slate-500">
-              Crea la cuenta de tu empresa para continuar.
-            </p>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-bold tracking-[0.18em] uppercase text-slate-500">
+                  Registro empresa
+                </div>
+                <h2 className="mt-4 text-2xl md:text-3xl font-bold tracking-tight text-[#111827]">
+                  Crea tu cuenta
+                </h2>
+                <p className="mt-2 text-sm text-slate-500">
+                  Configura lo básico para empezar a publicar y gestionar tus vacantes.
+                </p>
+              </div>
+              <div className="hidden sm:flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-[11px] text-slate-600">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#1e3456] text-white text-[11px] font-bold">
+                  1
+                </span>
+                <span>Datos</span>
+              </div>
+            </div>
+
             <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3 text-sm text-slate-600 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-              <span>¿Quieres registrarte como talento?</span>
+              <span>¿Eres talento?</span>
               <div className="flex items-center gap-3">
                 <Link to={routes.talentSignUp} className="font-semibold text-[#1e3456] hover:underline">
                   Registro talento
@@ -540,82 +556,87 @@ export function SignUpCompanyPage() {
               </div>
             </div>
 
-          {oauthError ? (
-            <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {oauthError}
+            {oauthError ? (
+              <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {oauthError}
+              </div>
+            ) : null}
+
+            {error ? (
+              <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {error}
+              </div>
+            ) : null}
+
+            <div className="mt-8">
+              <p className="text-[10px] font-semibold tracking-widest uppercase text-slate-400">
+                Registro rápido
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
+                <button
+                  type="button"
+                  className="flex items-center justify-center gap-2 rounded-xl py-3 font-semibold text-slate-500 border border-slate-200 bg-white transition-colors text-sm disabled:opacity-60 disabled:pointer-events-none"
+                  disabled
+                >
+                  <svg className="w-4 h-4" fill="#0077b5" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+                  </svg>
+                  LinkedIn (pronto)
+                </button>
+                <button
+                  type="button"
+                  className="flex items-center justify-center gap-2 rounded-xl py-3 font-semibold text-slate-700 border border-slate-200 bg-white hover:bg-slate-50 transition-colors text-sm disabled:opacity-60 disabled:pointer-events-none"
+                  disabled={oauthLoading || isLoading}
+                  onClick={startGoogleOAuth}
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      fill="#4285F4"
+                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                    />
+                  </svg>
+                  {oauthLoading ? "Conectando..." : "Google"}
+                </button>
+              </div>
             </div>
-          ) : null}
 
-          {error ? (
-            <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
+            <div className="flex items-center gap-3 my-7">
+              <div className="h-px bg-slate-100 flex-1" />
+              <span className="text-[10px] font-semibold text-slate-400 tracking-widest uppercase">
+                o con correo
+              </span>
+              <div className="h-px bg-slate-100 flex-1" />
             </div>
-          ) : null}
 
-          <div className="grid grid-cols-2 gap-4 mt-8 mb-8">
-            <button
-              type="button"
-              className="flex items-center justify-center gap-2 border border-slate-200 rounded-xl py-3 font-medium text-slate-600 hover:bg-slate-50 transition-colors text-sm disabled:opacity-60 disabled:pointer-events-none"
-              disabled
+            <form
+              className="space-y-5"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setSubmitAttempted(true);
+                clearError();
+                if (!companyNameOk || !emailOk || !companySize.trim() || !passwordOk || !confirmOk || !acceptedTerms) return;
+                await signUp({
+                  companyName: companyName.trim(),
+                  companySize,
+                  email: email.trim(),
+                  password,
+                  acceptedTerms: true,
+                  acceptedPrivacy: true,
+                });
+              }}
             >
-              <svg className="w-4 h-4" fill="#0077b5" viewBox="0 0 24 24">
-                <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
-              </svg>
-              LinkedIn
-            </button>
-            <button
-              type="button"
-              className="flex items-center justify-center gap-2 border border-slate-200 rounded-xl py-3 font-medium text-slate-600 hover:bg-slate-50 transition-colors text-sm disabled:opacity-60 disabled:pointer-events-none"
-              disabled={oauthLoading || isLoading}
-              onClick={startGoogleOAuth}
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24">
-                <path
-                  fill="#4285F4"
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                />
-              </svg>
-              {oauthLoading ? "Cargando..." : "Google"}
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3 mb-6">
-            <div className="h-px bg-slate-100 flex-1" />
-            <span className="text-[10px] font-semibold text-slate-400 tracking-widest uppercase">
-              O continúa con correo
-            </span>
-            <div className="h-px bg-slate-100 flex-1" />
-          </div>
-
-          <form
-            className="space-y-5"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              setSubmitAttempted(true);
-              clearError();
-              if (!companyNameOk || !emailOk || !companySize.trim() || !passwordOk || !confirmOk || !acceptedTerms) return;
-              await signUp({
-                companyName: companyName.trim(),
-                companySize,
-                email: email.trim(),
-                password,
-                acceptedTerms: true,
-                acceptedPrivacy: true,
-              });
-            }}
-          >
             <div>
               <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-2">
                 Nombre de la Empresa
@@ -759,6 +780,9 @@ export function SignUpCompanyPage() {
             >
               {isLoading ? "Creando..." : "Crear Cuenta de Empresa"}
             </Button>
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              Tu contraseña se guarda de forma segura y podrás completar el perfil de tu empresa después.
+            </p>
           </form>
 
           <p className="text-center text-xs text-slate-500 mt-8">

@@ -71,13 +71,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       /**
        * Login de Empresa (mock).
        */
-      loginCompany: ({ companyName, email }) => {
+      loginCompany: ({ companyName, email, onboardingCompleted }) => {
         setState({
           isAuthenticated: true,
           role: "empresa",
           userName: normalizeNameFromEmail(email),
           companyName,
-          onboardingCompleted: true,
+          onboardingCompleted: onboardingCompleted ?? false,
         });
       },
       /**
