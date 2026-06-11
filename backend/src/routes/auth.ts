@@ -26,6 +26,23 @@ export function createAuthRouter(ctx: AppContext) {
     companyProfiles,
   );
 
+  async function readOnboardingCompleted(user: { id: number; role: "talento" | "empresa" }) {
+    if (user.role === "empresa") {
+      const profile = await companyProfiles.get(user.id);
+      return companyProfiles.isOnboardingComplete(profile);
+    }
+    const profile = await new TalentProfileRepository(ctx.db).get(user.id);
+    return Boolean(
+      profile?.fullName &&
+        profile?.location &&
+        profile?.university &&
+        profile?.degree &&
+        profile?.gradYear &&
+        profile?.careerInterests &&
+        profile.careerInterests.length >= 3,
+    );
+  }
+
   async function handleSupabaseLogin(req: any, roleRawFallback: string) {
     const auth = req.headers.authorization ?? "";
     const token = auth.startsWith("Bearer ") ? auth.slice("Bearer ".length).trim() : "";
@@ -96,7 +113,7 @@ export function createAuthRouter(ctx: AppContext) {
         acceptedPrivacyAt: now,
       });
       await companyProfiles.upsert(Number(out.user.id), { companyName: displayName, companySize });
-      return res.status(201).json(out);
+      return res.status(201).json({ ...out, onboardingCompleted: false });
     } catch (e) {
       return next(e);
     }
@@ -112,7 +129,8 @@ export function createAuthRouter(ctx: AppContext) {
       const userEmail = email(body.email, "email");
       const userPassword = requiredString(body.password, "password");
       const out = await service.login({ email: userEmail, password: userPassword });
-      return res.json(out);
+      const onboardingCompleted = await readOnboardingCompleted(out.user as any);
+      return res.json({ ...out, onboardingCompleted });
     } catch (e) {
       return next(e);
     }
@@ -121,7 +139,8 @@ export function createAuthRouter(ctx: AppContext) {
   router.post("/login/google", async (req, res, next) => {
     try {
       const out = await handleSupabaseLogin(req, "talento");
-      return res.json(out);
+      const onboardingCompleted = await readOnboardingCompleted(out.user as any);
+      return res.json({ ...out, onboardingCompleted });
     } catch (e) {
       return next(e);
     }
@@ -130,7 +149,8 @@ export function createAuthRouter(ctx: AppContext) {
   router.post("/login/linkedin", async (req, res, next) => {
     try {
       const out = await handleSupabaseLogin(req, "talento");
-      return res.json(out);
+      const onboardingCompleted = await readOnboardingCompleted(out.user as any);
+      return res.json({ ...out, onboardingCompleted });
     } catch (e) {
       return next(e);
     }
@@ -139,7 +159,8 @@ export function createAuthRouter(ctx: AppContext) {
   router.post("/login/oauth", async (req, res, next) => {
     try {
       const out = await handleSupabaseLogin(req, "talento");
-      return res.json(out);
+      const onboardingCompleted = await readOnboardingCompleted(out.user as any);
+      return res.json({ ...out, onboardingCompleted });
     } catch (e) {
       return next(e);
     }

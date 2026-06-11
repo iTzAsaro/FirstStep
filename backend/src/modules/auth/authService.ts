@@ -21,6 +21,7 @@ import { UserRepository } from "./userRepository";
 export type AuthResult = {
   user: AuthUser;
   accessToken: string;
+  isNewUser?: boolean;
 };
 
 /**
@@ -106,6 +107,7 @@ export class AuthService {
     }
 
     let user;
+    let isNewUser = false;
     try {
       user = await this.users.findBySupabaseUserId(supabaseUserId);
     } catch (error) {
@@ -126,6 +128,20 @@ export class AuthService {
       );
     }
 
+    if (user) {
+      if (params.role === "talento") {
+        const currentProfile = await this.talentProfiles.get(user.id);
+        if (!currentProfile) {
+          await this.talentProfiles.upsert(user.id, { fullName: oauthDisplayName ?? email.split("@")[0] });
+        }
+      } else {
+        const currentProfile = await this.companyProfiles.get(user.id);
+        if (!currentProfile) {
+          await this.companyProfiles.upsert(user.id, { companyName: oauthDisplayName ?? email.split("@")[0] });
+        }
+      }
+    }
+
     if (user && params.role === "talento" && oauthDisplayName) {
       const currentProfile = await this.talentProfiles.get(user.id);
       const currentName = normalizeDisplayName(currentProfile?.fullName ?? null);
@@ -144,6 +160,7 @@ export class AuthService {
           passwordHash,
           supabaseUserId,
         });
+        isNewUser = true;
 
         if (params.role === "talento") {
           await this.talentProfiles.upsert(user.id, { fullName: oauthDisplayName ?? email.split("@")[0] });
@@ -156,7 +173,7 @@ export class AuthService {
     }
 
     const authUser: AuthUser = { id: user.id, email: user.email, role: user.role };
-    return { user: authUser, accessToken: signAccessToken(this.env, authUser) } satisfies AuthResult;
+    return { user: authUser, accessToken: signAccessToken(this.env, authUser), isNewUser } satisfies AuthResult;
   }
 }
 
@@ -263,7 +280,9 @@ async function verifySupabaseAccessToken(env: Env, token: string) {
     throw Errors.badRequest(msg);
   }
   const jwk = keys.find((k) => typeof k?.kid === "string" && k.kid === kid);
-  if (!jwk) throw Errors.unauthorized("Token inválido.");
+  if (!jwk) {
+    throw Errors.unauthorized("Token inválido.");
+  }
 
   let keyObj: crypto.KeyObject;
   try {
@@ -288,8 +307,12 @@ async function verifySupabaseAccessToken(env: Env, token: string) {
     const exp = typeof payload?.exp === "number" ? payload.exp : null;
     const nbf = typeof payload?.nbf === "number" ? payload.nbf : null;
 
-    if (exp !== null && now >= exp) throw Errors.unauthorized("Token expirado.");
-    if (nbf !== null && now < nbf) throw Errors.unauthorized("Token inválido.");
+    if (exp !== null && now >= exp) {
+      throw Errors.unauthorized("Token expirado.");
+    }
+    if (nbf !== null && now < nbf) {
+      throw Errors.unauthorized("Token inválido.");
+    }
 
     return payload;
   } catch {
