@@ -5,10 +5,13 @@
 // ║ Creado:      20-05-2026                                              ║
 // ╚══════════════════════════════════════════════════════════════════════╝
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Link, useNavigate } from "react-router-dom";
 
+import { createClient } from "@supabase/supabase-js";
+
+import { useSession } from "@/entities/session";
 import { useLoginTalent } from "@/features/auth/login-talent/model/useLoginTalent";
 import { routes } from "@/shared/config/routes";
 import { Button, Input } from "@/shared/ui";
@@ -19,14 +22,148 @@ import { Button, Input } from "@/shared/ui";
  */
 export function LoginPortalPage() {
   const navigate = useNavigate();
+  const session = useSession();
   const { loginWithPassword, isLoading, error, clearError } = useLoginTalent();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [oauthLoading, setOauthLoading] = useState(false);
+  const [oauthError, setOauthError] = useState<string | null>(null);
 
   const isSubmitDisabled = useMemo(() => {
-    return email.trim().length === 0 || password.trim().length === 0 || isLoading;
-  }, [email, isLoading, password]);
+    return email.trim().length === 0 || password.trim().length === 0 || isLoading || oauthLoading;
+  }, [email, isLoading, oauthLoading, password]);
+
+  const normalizedSupabaseUrl = useMemo(() => {
+    const env = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+    const local = localStorage.getItem("firststep.supabase.url") ?? undefined;
+    const raw = (env ?? local ?? "").trim();
+    if (!raw) return "";
+    return raw.replace("://xkhl", "://xhkl").replace(/\/+$/, "");
+  }, []);
+
+  const supabaseAnonKey = useMemo(() => {
+    const env = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+    const local = localStorage.getItem("firststep.supabase.anonKey") ?? undefined;
+    return (env ?? local ?? "").trim();
+  }, []);
+
+  const supabaseConfigured = Boolean(normalizedSupabaseUrl && supabaseAnonKey);
+
+  const readEmailFromJwt = (token: string) => {
+    try {
+      const [, payload] = token.split(".");
+      if (!payload) return null;
+      const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+      const parsed = JSON.parse(json) as { email?: unknown };
+      return typeof parsed.email === "string" ? parsed.email : null;
+    } catch {
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    let alive = true;
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get("code");
+    const searchError = url.searchParams.get("error_description") || url.searchParams.get("error");
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const hashAccessToken = hashParams.get("access_token");
+
+    if (!code && !hashAccessToken && !searchError) return;
+
+    (async () => {
+      setOauthError(null);
+      setOauthLoading(true);
+      try {
+        if (!supabaseConfigured) {
+          throw new Error("OAuth no está configurado (Supabase URL / Anon Key).");
+        }
+        if (searchError) throw new Error(searchError);
+
+        const supabase = createClient(normalizedSupabaseUrl, supabaseAnonKey);
+        let supabaseAccessToken: string | null = null;
+        let userEmail: string | null = null;
+
+        if (code) {
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeError) throw new Error(exchangeError.message);
+          const { data, error: sessionReadError } = await supabase.auth.getSession();
+          if (sessionReadError) throw new Error(sessionReadError.message);
+          supabaseAccessToken = data.session?.access_token ?? null;
+          userEmail = data.session?.user?.email ?? null;
+        } else if (hashAccessToken) {
+          supabaseAccessToken = hashAccessToken;
+          userEmail = readEmailFromJwt(hashAccessToken);
+        }
+
+        if (!supabaseAccessToken) throw new Error("No se pudo obtener el access token de Google.");
+        if (!userEmail) throw new Error("No se pudo obtener el email del usuario.");
+
+        const res = await fetch("/api/auth/login/oauth", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${supabaseAccessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ role: "talento" }),
+        });
+        if (!res.ok) {
+          let message = `Login OAuth falló (${res.status}).`;
+          try {
+            const out = (await res.json()) as any;
+            if (typeof out?.error?.message === "string" && out.error.message) message = out.error.message;
+          } catch { }
+          throw new Error(message);
+        }
+
+        const out = (await res.json()) as { accessToken?: string; isNewUser?: boolean };
+        const apiToken = typeof out.accessToken === "string" ? out.accessToken : "";
+        if (!apiToken) throw new Error("El backend no devolvió accessToken.");
+        localStorage.setItem("firststep.api.accessToken", apiToken);
+
+        const isNewUser = out.isNewUser === true;
+        session.loginTalent({ email: userEmail, onboardingCompleted: !isNewUser });
+        navigate(isNewUser ? routes.onboarding : routes.dashboard);
+      } catch (e) {
+        if (!alive) return;
+        const msg = e instanceof Error ? e.message : String(e);
+        setOauthError(msg);
+      } finally {
+        if (alive) {
+          setOauthLoading(false);
+          window.history.replaceState({}, document.title, routes.portal);
+        }
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [navigate, normalizedSupabaseUrl, session, supabaseAnonKey, supabaseConfigured]);
+
+  const startGoogleOAuth = async () => {
+    clearError();
+    setOauthError(null);
+    if (!supabaseConfigured) {
+      setOauthError("OAuth no está configurado (Supabase URL / Anon Key).");
+      return;
+    }
+    try {
+      setOauthLoading(true);
+      const supabase = createClient(normalizedSupabaseUrl, supabaseAnonKey);
+      const redirectTo = `${window.location.origin}${routes.portal}`;
+      const { error: oauthStartError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo },
+      });
+      if (oauthStartError) throw new Error(oauthStartError.message);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setOauthError(msg);
+      setOauthLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 md:p-8 bg-[#f6f8fb]">
@@ -46,6 +183,11 @@ export function LoginPortalPage() {
           {error ? (
             <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
+            </div>
+          ) : null}
+          {oauthError ? (
+            <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {oauthError}
             </div>
           ) : null}
 
@@ -107,6 +249,8 @@ export function LoginPortalPage() {
           <div className="grid grid-cols-2 gap-4 mb-10">
             <button
               type="button"
+              onClick={startGoogleOAuth}
+              disabled={oauthLoading}
               className="flex items-center justify-center gap-2 border border-slate-200 rounded-xl py-3.5 font-medium text-slate-600 hover:bg-slate-50 transition-colors text-sm"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -127,7 +271,7 @@ export function LoginPortalPage() {
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                 />
               </svg>
-              Google
+              {oauthLoading ? "Conectando..." : "Google"}
             </button>
             <button
               type="button"

@@ -14,34 +14,35 @@ import { useLoginTalent } from "@/features/auth/login-talent/model/useLoginTalen
 import { routes } from "@/shared/config/routes";
 import { Button, Input, PasswordField } from "@/shared/ui";
 
+function normalizeSupabaseUrl(raw: string) {
+  const v = raw.trim().replace("xkhlhawelqtmxcoqznup.supabase.co", "xhklhawelqtmxcoqznup.supabase.co");
+  if (!v) return "";
+  try {
+    const u = new URL(v);
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return v.replace(/\/rest\/v1(\/.*)?$/i, "").replace(/\/+$/g, "");
+  }
+}
+
+function readEmailFromJwt(token: string) {
+  try {
+    const [, payload] = token.split(".");
+    if (!payload) return null;
+    const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+    const parsed = JSON.parse(json) as { email?: unknown };
+    return typeof parsed.email === "string" ? parsed.email : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Renderiza el formulario de login para usuarios (talento).
  * En el mock actual, el login persiste sesión local y redirige a onboarding.
  */
 export function LoginUserPage() {
   const { loginWithEmail, loginWithPassword, isLoading, error, clearError } = useLoginTalent();
-
-  const normalizeSupabaseUrl = (raw: string) => {
-    const v = raw.trim().replace("xkhlhawelqtmxcoqznup.supabase.co", "xhklhawelqtmxcoqznup.supabase.co");
-    if (!v) return "";
-    try {
-      const u = new URL(v);
-      return `${u.protocol}//${u.host}`;
-    } catch {
-      return v.replace(/\/rest\/v1(\/.*)?$/i, "").replace(/\/+$/g, "");
-    }
-  };
-  const readEmailFromJwt = (token: string) => {
-    try {
-      const [, payload] = token.split(".");
-      if (!payload) return null;
-      const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
-      const parsed = JSON.parse(json) as { email?: unknown };
-      return typeof parsed.email === "string" ? parsed.email : null;
-    } catch {
-      return null;
-    }
-  };
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

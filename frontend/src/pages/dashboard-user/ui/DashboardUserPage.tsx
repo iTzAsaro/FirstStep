@@ -37,6 +37,33 @@ function hasText(value: unknown) {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+const usdFormatterEs = new Intl.NumberFormat("es-ES", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 0,
+});
+
+function timeAgo(iso: string) {
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return "Hace un momento";
+  const diff = Date.now() - t;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "Hace un momento";
+  if (mins < 60) return `Hace ${mins} min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `Hace ${hours} h`;
+  const days = Math.floor(hours / 24);
+  return `Hace ${days} d`;
+}
+
+function formatSalary(min: number | null, max: number | null) {
+  if (min === null && max === null) return "Compensación a convenir";
+  const format = (value: number) => usdFormatterEs.format(value);
+  if (min !== null && max !== null) return `${format(min)} - ${format(max)}`;
+  if (min !== null) return `Desde ${format(min)}`;
+  return `Hasta ${format(max as number)}`;
+}
+
 /**
  * Renderiza el dashboard principal del usuario (talento) en modo mock.
  * La información presentada es estática y sirve como base visual del producto.
@@ -144,19 +171,6 @@ export function DashboardUserPage() {
     hasApplied: boolean;
   }>;
 
-  const timeAgo = (iso: string) => {
-    const t = new Date(iso).getTime();
-    if (!Number.isFinite(t)) return "Hace un momento";
-    const diff = Date.now() - t;
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return "Hace un momento";
-    if (mins < 60) return `Hace ${mins} min`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `Hace ${hours} h`;
-    const days = Math.floor(hours / 24);
-    return `Hace ${days} d`;
-  };
-
   const activity: ActivityItem[] = useMemo(() => {
     const raw = (data?.activity ?? []) as any[];
     if (!Array.isArray(raw) || raw.length === 0) return [];
@@ -231,19 +245,6 @@ export function DashboardUserPage() {
       state: recentSessions.some((sessionItem) => sessionItem.kind === "interview") ? "Activo" : "Nuevo",
     },
   ];
-  const formatSalary = (min: number | null, max: number | null) => {
-    if (min === null && max === null) return "Compensación a convenir";
-    const format = (value: number) =>
-      new Intl.NumberFormat("es-ES", {
-        style: "currency",
-        currency: "USD",
-        maximumFractionDigits: 0,
-      }).format(value);
-    if (min !== null && max !== null) return `${format(min)} - ${format(max)}`;
-    if (min !== null) return `Desde ${format(min)}`;
-    return `Hasta ${format(max as number)}`;
-  };
-
   return (
     <div className="min-h-screen flex flex-col text-slate-800 bg-[linear-gradient(180deg,#eef4fb_0%,#f8fafc_24%,#f8fafc_100%)]">
       {applyModal ? (
