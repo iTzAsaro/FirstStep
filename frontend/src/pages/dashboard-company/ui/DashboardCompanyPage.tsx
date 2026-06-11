@@ -7,11 +7,12 @@ import { useLogout } from "@/features/auth/logout/model/useLogout";
 import { routes } from "@/shared/config/routes";
 import { Button, Input, Select } from "@/shared/ui";
 
-type Tab = "overview" | "jobs" | "applicants" | "chat";
+type Tab = "overview" | "jobs" | "applicants" | "chat" | "profile";
 type EmploymentType = "full_time" | "part_time" | "contract" | "internship";
 type Seniority = "junior" | "mid" | "senior";
 type JobStatus = "active" | "paused" | "closed";
 type ApplicantStatus = "submitted" | "withdrawn" | "rejected" | "accepted";
+type ListViewMode = "cards" | "table";
 
 type CompanyProfile = {
   companyName: string | null;
@@ -21,6 +22,9 @@ type CompanyProfile = {
   industry: string | null;
   activitySector: string | null;
   location: string | null;
+  address: string | null;
+  contactEmail: string | null;
+  website?: string | null;
   description: string | null;
   verificationStatus: "pending" | "verified";
 };
@@ -157,7 +161,20 @@ export function DashboardCompanyPage() {
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
 
-  const [filters, setFilters] = useState({ query: "", skills: "", experience: "", status: "all", jobId: "all" });
+  const [jobsQuery, setJobsQuery] = useState("");
+  const [jobsStatus, setJobsStatus] = useState<"all" | JobStatus>("all");
+  const [jobsView, setJobsView] = useState<ListViewMode>("cards");
+  const [jobsPage, setJobsPage] = useState(1);
+  const [jobsPageSize, setJobsPageSize] = useState(10);
+
+  const [applicantsQuery, setApplicantsQuery] = useState("");
+  const [applicantsSkills, setApplicantsSkills] = useState("");
+  const [applicantsExperience, setApplicantsExperience] = useState("");
+  const [applicantsStatus, setApplicantsStatus] = useState<"all" | ApplicantStatus>("all");
+  const [applicantsJobId, setApplicantsJobId] = useState<"all" | string>("all");
+  const [applicantsView, setApplicantsView] = useState<ListViewMode>("table");
+  const [applicantsPage, setApplicantsPage] = useState(1);
+  const [applicantsPageSize, setApplicantsPageSize] = useState(10);
 
   const [modal, setModal] = useState<null | "create" | { editId: number }>(null);
   const [isSavingJob, setIsSavingJob] = useState(false);
@@ -184,6 +201,9 @@ export function DashboardCompanyPage() {
   const [applicantDetail, setApplicantDetail] = useState<null | { application: any; cvs: Array<{ id: string; title: string; content: string; updatedAt: string }> }>(null);
   const [isLoadingApplicant, setIsLoadingApplicant] = useState(false);
 
+  const [toast, setToast] = useState<null | { kind: "success" | "error"; title: string; message?: string }>(null);
+  const [confirm, setConfirm] = useState<null | { title: string; message: string; actionLabel: string; onConfirm: () => void }>(null);
+
   const formErrors = useMemo(() => {
     const next: Record<string, string> = {};
     if (!formTitle.trim()) next.title = "El cargo solicitado es obligatorio.";
@@ -195,6 +215,63 @@ export function DashboardCompanyPage() {
     if (typeof min === "number" && typeof max === "number" && min > max) next.salaryMax = "El maximo debe ser mayor o igual al minimo.";
     return next;
   }, [formDescription, formSalaryMax, formSalaryMin, formTitle]);
+
+  const filteredJobs = useMemo(() => {
+    const q = jobsQuery.trim().toLowerCase();
+    return jobs
+      .filter((job) => (jobsStatus === "all" ? true : job.status === jobsStatus))
+      .filter((job) => {
+        if (!q) return true;
+        return (
+          job.title.toLowerCase().includes(q) ||
+          job.description.toLowerCase().includes(q) ||
+          (job.location ?? "").toLowerCase().includes(q)
+        );
+      });
+  }, [jobs, jobsQuery, jobsStatus]);
+
+  const jobsTotalPages = useMemo(() => Math.max(1, Math.ceil(filteredJobs.length / jobsPageSize)), [filteredJobs.length, jobsPageSize]);
+  const pagedJobs = useMemo(() => {
+    const start = (jobsPage - 1) * jobsPageSize;
+    return filteredJobs.slice(start, start + jobsPageSize);
+  }, [filteredJobs, jobsPage, jobsPageSize]);
+
+  const filteredApplicants = useMemo(() => {
+    const q = applicantsQuery.trim().toLowerCase();
+    const skills = applicantsSkills.trim().toLowerCase();
+    const exp = applicantsExperience.trim().toLowerCase();
+    return applicants
+      .filter((app) => (applicantsStatus === "all" ? true : app.status === applicantsStatus))
+      .filter((app) => (applicantsJobId === "all" ? true : String(app.jobId) === String(applicantsJobId)))
+      .filter((app) => {
+        if (!q && !skills && !exp) return true;
+        const haystack = [
+          app.jobTitle,
+          app.talentEmail,
+          app.fullName ?? "",
+          app.location ?? "",
+          app.headline ?? "",
+          ...(app.careerInterests ?? []),
+          app.coverLetter ?? "",
+          ...app.cvTitles,
+        ]
+          .join(" ")
+          .toLowerCase();
+        if (q && !haystack.includes(q)) return false;
+        if (skills && !haystack.includes(skills)) return false;
+        if (exp && !haystack.includes(exp)) return false;
+        return true;
+      });
+  }, [applicants, applicantsExperience, applicantsJobId, applicantsQuery, applicantsSkills, applicantsStatus]);
+
+  const applicantsTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(filteredApplicants.length / applicantsPageSize)),
+    [applicantsPageSize, filteredApplicants.length],
+  );
+  const pagedApplicants = useMemo(() => {
+    const start = (applicantsPage - 1) * applicantsPageSize;
+    return filteredApplicants.slice(start, start + applicantsPageSize);
+  }, [applicantsPage, applicantsPageSize, filteredApplicants]);
 
   const activeConversation = conversations.find((item) => item.id === activeConversationId) ?? null;
 
@@ -213,6 +290,22 @@ export function DashboardCompanyPage() {
 
   function openCreateModal() {
     resetJobForm();
+    try {
+      const raw = localStorage.getItem("firststep.company.jobDraft.v1");
+      if (raw) {
+        const draft = JSON.parse(raw) as any;
+        if (typeof draft?.title === "string") setFormTitle(draft.title);
+        if (typeof draft?.description === "string") setFormDescription(draft.description);
+        if (typeof draft?.requirements === "string") setFormRequirements(draft.requirements);
+        if (typeof draft?.benefits === "string") setFormBenefits(draft.benefits);
+        if (typeof draft?.location === "string") setFormLocation(draft.location);
+        if (typeof draft?.employmentType === "string") setFormEmploymentType(draft.employmentType);
+        if (typeof draft?.seniority === "string") setFormSeniority(draft.seniority);
+        if (typeof draft?.salaryMin === "string") setFormSalaryMin(draft.salaryMin);
+        if (typeof draft?.salaryMax === "string") setFormSalaryMax(draft.salaryMax);
+        if (typeof draft?.deadline === "string") setFormDeadline(draft.deadline);
+      }
+    } catch { }
     setModal("create");
   }
 
@@ -290,14 +383,8 @@ export function DashboardCompanyPage() {
     setJobs(out.jobs ?? []);
   }
 
-  async function loadApplicants(nextFilters = filters) {
-    const params = new URLSearchParams();
-    if (nextFilters.query.trim()) params.set("query", nextFilters.query.trim());
-    if (nextFilters.skills.trim()) params.set("skills", nextFilters.skills.trim());
-    if (nextFilters.experience.trim()) params.set("experience", nextFilters.experience.trim());
-    if (nextFilters.status !== "all") params.set("status", nextFilters.status);
-    if (nextFilters.jobId !== "all") params.set("jobId", nextFilters.jobId);
-    const out = await fetchJson<{ applicants: ApplicantRow[] }>(`/api/company/applicants${params.size ? `?${params.toString()}` : ""}`);
+  async function loadApplicants() {
+    const out = await fetchJson<{ applicants: ApplicantRow[] }>("/api/company/applicants");
     setApplicants(out.applicants ?? []);
   }
 
@@ -321,7 +408,7 @@ export function DashboardCompanyPage() {
     (async () => {
       try {
         setError(null);
-        await Promise.all([loadDashboard(), loadJobs(), loadApplicants(filters), loadConversations()]);
+        await Promise.all([loadDashboard(), loadJobs(), loadApplicants(), loadConversations()]);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -336,6 +423,45 @@ export function DashboardCompanyPage() {
       setError(e instanceof Error ? e.message : String(e));
     });
   }, [activeConversationId, token]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), 4500);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
+
+  useEffect(() => {
+    if (modal !== "create") return;
+    try {
+      localStorage.setItem(
+        "firststep.company.jobDraft.v1",
+        JSON.stringify({
+          title: formTitle,
+          description: formDescription,
+          requirements: formRequirements,
+          benefits: formBenefits,
+          location: formLocation,
+          employmentType: formEmploymentType,
+          seniority: formSeniority,
+          salaryMin: formSalaryMin,
+          salaryMax: formSalaryMax,
+          deadline: formDeadline,
+        }),
+      );
+    } catch { }
+  }, [
+    formBenefits,
+    formDeadline,
+    formDescription,
+    formEmploymentType,
+    formLocation,
+    formRequirements,
+    formSalaryMax,
+    formSalaryMin,
+    formSeniority,
+    formTitle,
+    modal,
+  ]);
 
   async function handleSaveJob() {
     if (!token || Object.keys(formErrors).length > 0 || isSavingJob) return;
@@ -362,10 +488,17 @@ export function DashboardCompanyPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      if (!isEdit) {
+        try {
+          localStorage.removeItem("firststep.company.jobDraft.v1");
+        } catch { }
+      }
       setModal(null);
       await Promise.all([loadJobs(), loadDashboard()]);
+      setToast({ kind: "success", title: isEdit ? "Oportunidad actualizada" : "Oportunidad publicada" });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      setToast({ kind: "error", title: "No se pudo guardar", message: e instanceof Error ? e.message : String(e) });
     } finally {
       setIsSavingJob(false);
     }
@@ -387,9 +520,11 @@ export function DashboardCompanyPage() {
   async function handleDeleteJob(jobId: number) {
     try {
       await fetchJson(`/api/company/jobs/${jobId}`, { method: "DELETE" });
-      await Promise.all([loadJobs(), loadDashboard(), loadApplicants(filters)]);
+      await Promise.all([loadJobs(), loadDashboard(), loadApplicants()]);
+      setToast({ kind: "success", title: "Oportunidad eliminada" });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      setToast({ kind: "error", title: "No se pudo eliminar", message: e instanceof Error ? e.message : String(e) });
     }
   }
 
@@ -400,9 +535,11 @@ export function DashboardCompanyPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
-      await Promise.all([loadApplicants(filters), loadDashboard()]);
+      await Promise.all([loadApplicants(), loadDashboard()]);
+      setToast({ kind: "success", title: "Estado actualizado" });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      setToast({ kind: "error", title: "No se pudo actualizar", message: e instanceof Error ? e.message : String(e) });
     }
   }
 
@@ -493,6 +630,53 @@ export function DashboardCompanyPage() {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-800">
+      {toast ? (
+        <div className="fixed right-4 top-4 z-[60] w-[min(420px,calc(100vw-2rem))]" role="status" aria-live="polite">
+          <div
+            className={`rounded-2xl border px-4 py-3 shadow-[0_20px_50px_-20px_rgba(15,23,42,0.25)] ${
+              toast.kind === "success" ? "border-emerald-200 bg-emerald-50" : "border-red-200 bg-red-50"
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className={`text-sm font-semibold ${toast.kind === "success" ? "text-emerald-900" : "text-red-900"}`}>{toast.title}</p>
+                {toast.message ? <p className={`mt-1 text-sm ${toast.kind === "success" ? "text-emerald-800" : "text-red-800"}`}>{toast.message}</p> : null}
+              </div>
+              <button type="button" className="rounded-lg px-2 py-1 text-sm text-slate-600 hover:bg-white/60" onClick={() => setToast(null)}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {confirm ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <button type="button" className="absolute inset-0 bg-slate-950/50" onClick={() => setConfirm(null)} />
+          <div className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_60px_-20px_rgba(15,23,42,0.35)]">
+            <div className="border-b border-slate-100 px-6 py-4">
+              <h2 className="text-lg font-bold text-slate-900">{confirm.title}</h2>
+              <p className="mt-1 text-sm text-slate-500">{confirm.message}</p>
+            </div>
+            <div className="flex flex-col-reverse gap-3 px-6 py-4 sm:flex-row sm:justify-end">
+              <Button variant="secondary" onClick={() => setConfirm(null)}>
+                Cancelar
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  const run = confirm.onConfirm;
+                  setConfirm(null);
+                  run();
+                }}
+              >
+                {confirm.actionLabel}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {applicantModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <button type="button" className="absolute inset-0 bg-slate-950/50" onClick={() => setApplicantModal(null)} />
@@ -647,7 +831,7 @@ export function DashboardCompanyPage() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="secondary" onClick={openCreateModal}>Publicar nuevo trabajo</Button>
-            <Button variant="outline" onClick={() => navigate(routes.companyOnboarding)}>Editar onboarding</Button>
+            <Button variant="outline" onClick={() => setTab("profile")}>Perfil</Button>
             <Button variant="outline" onClick={logout}>Cerrar sesion</Button>
           </div>
         </div>
@@ -689,6 +873,7 @@ export function DashboardCompanyPage() {
                 ["jobs", "Oportunidades"],
                 ["applicants", "Postulantes"],
                 ["chat", "Chat privado"],
+                ["profile", "Empresa"],
               ].map(([key, label]) => (
                 <Button key={key} variant={tab === key ? "primary" : "secondary"} size="sm" onClick={() => setTab(key as Tab)}>
                   {label}
@@ -729,122 +914,404 @@ export function DashboardCompanyPage() {
 
             {tab === "jobs" ? (
               <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                   <div>
-                    <h2 className="text-xl font-bold text-slate-900">Publicacion de oportunidades</h2>
-                    <p className="mt-1 text-sm text-slate-500">Crea, edita, pausa, reactiva, cierra o elimina oportunidades con estado en tiempo real.</p>
+                    <h2 className="text-xl font-bold text-slate-900">Publicación de oportunidades</h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Crea, edita y controla el estado de tus oportunidades con filtros rápidos y vistas flexibles.
+                    </p>
                   </div>
-                  <Button onClick={openCreateModal}>Publicar nuevo trabajo</Button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant={jobsView === "cards" ? "primary" : "secondary"}
+                      onClick={() => setJobsView("cards")}
+                    >
+                      Tarjetas
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={jobsView === "table" ? "primary" : "secondary"}
+                      onClick={() => setJobsView("table")}
+                    >
+                      Tabla
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => void loadJobs()}>
+                      Recargar
+                    </Button>
+                    <Button onClick={openCreateModal}>Publicar nuevo trabajo</Button>
+                  </div>
                 </div>
 
-                {jobs.length === 0 ? (
-                  <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
-                    <p className="text-lg font-semibold text-slate-900">Aun no tienes trabajos publicados</p>
-                    <p className="mt-2 text-sm text-slate-500">Publica la primera oportunidad para empezar a recibir postulaciones.</p>
+                <div className="mt-5 grid gap-3 lg:grid-cols-12">
+                  <div className="lg:col-span-6">
+                    <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      Buscar
+                    </label>
+                    <Input value={jobsQuery} onChange={(e) => { setJobsQuery(e.target.value); setJobsPage(1); }} placeholder="Cargo, ubicación, descripción…" />
                   </div>
-                ) : (
-                  <div className="mt-6 grid gap-4 xl:grid-cols-2">
-                    {jobs.map((job) => (
-                      <article key={job.id} className="rounded-2xl border border-slate-200 bg-[#fcfdff] p-5">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                          <div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h3 className="text-lg font-semibold text-slate-900">{job.title}</h3>
-                              <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-600">{job.status}</span>
+                  <div className="lg:col-span-3">
+                    <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      Estado
+                    </label>
+                    <Select value={jobsStatus} onChange={(e) => { setJobsStatus(e.target.value as any); setJobsPage(1); }}>
+                      <option value="all">Todos</option>
+                      <option value="active">Activa</option>
+                      <option value="paused">Pausada</option>
+                      <option value="closed">Cerrada</option>
+                    </Select>
+                  </div>
+                  <div className="lg:col-span-3">
+                    <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      Por página
+                    </label>
+                    <Select value={String(jobsPageSize)} onChange={(e) => { setJobsPageSize(Number(e.target.value)); setJobsPage(1); }}>
+                      <option value="10">10</option>
+                      <option value="25">25</option>
+                      <option value="50">50</option>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm text-slate-500">
+                    Mostrando <span className="font-semibold text-slate-800">{pagedJobs.length}</span> de{" "}
+                    <span className="font-semibold text-slate-800">{filteredJobs.length}</span> oportunidades
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="secondary" disabled={jobsPage <= 1} onClick={() => setJobsPage((p) => Math.max(1, p - 1))}>
+                      Anterior
+                    </Button>
+                    <span className="text-sm text-slate-600">
+                      Página {jobsPage} / {jobsTotalPages}
+                    </span>
+                    <Button size="sm" variant="secondary" disabled={jobsPage >= jobsTotalPages} onClick={() => setJobsPage((p) => Math.min(jobsTotalPages, p + 1))}>
+                      Siguiente
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="mt-5">
+                  {jobs.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
+                      <p className="text-lg font-semibold text-slate-900">Aún no tienes trabajos publicados</p>
+                      <p className="mt-2 text-sm text-slate-500">Publica la primera oportunidad para empezar a recibir postulaciones.</p>
+                    </div>
+                  ) : filteredJobs.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
+                      <p className="text-lg font-semibold text-slate-900">Sin resultados</p>
+                      <p className="mt-2 text-sm text-slate-500">Prueba con otros filtros o limpia la búsqueda.</p>
+                    </div>
+                  ) : jobsView === "table" ? (
+                    <div className="overflow-hidden rounded-2xl border border-slate-200">
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full text-left text-sm">
+                          <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                            <tr>
+                              <th className="px-4 py-3">Cargo</th>
+                              <th className="px-4 py-3">Estado</th>
+                              <th className="px-4 py-3">Ubicación</th>
+                              <th className="px-4 py-3">Límite</th>
+                              <th className="px-4 py-3">Postulantes</th>
+                              <th className="px-4 py-3">Actualizado</th>
+                              <th className="px-4 py-3 text-right">Acciones</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200">
+                            {pagedJobs.map((job) => (
+                              <tr key={job.id} className="bg-white">
+                                <td className="px-4 py-3">
+                                  <div className="font-semibold text-slate-900">{job.title}</div>
+                                  <div className="text-xs text-slate-500">{employmentTypeLabel[job.employmentType]} · {seniorityLabel[job.seniority]}</div>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-600">{job.status}</span>
+                                </td>
+                                <td className="px-4 py-3 text-slate-600">{job.location || "Flexible"}</td>
+                                <td className="px-4 py-3 text-slate-600">{formatDate(job.applicationDeadline)}</td>
+                                <td className="px-4 py-3 text-slate-900">{job.applicantsCount}</td>
+                                <td className="px-4 py-3 text-slate-600">{formatDate(job.updatedAt)}</td>
+                                <td className="px-4 py-3">
+                                  <div className="flex flex-wrap justify-end gap-2">
+                                    <Button size="sm" variant="secondary" onClick={() => openEditModal(job)}>Editar</Button>
+                                    {job.status !== "paused" ? (
+                                      <Button size="sm" variant="outline" onClick={() => void handleJobStatus(job, "paused")}>Pausar</Button>
+                                    ) : (
+                                      <Button size="sm" variant="outline" onClick={() => void handleJobStatus(job, "active")}>Activar</Button>
+                                    )}
+                                    <Button size="sm" variant="outline" onClick={() => void handleJobStatus(job, "closed")}>Cerrar</Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() =>
+                                        setConfirm({
+                                          title: "Eliminar oportunidad",
+                                          message: "Esta acción es destructiva y eliminará la oportunidad y sus postulaciones asociadas.",
+                                          actionLabel: "Eliminar",
+                                          onConfirm: () => void handleDeleteJob(job.id),
+                                        })
+                                      }
+                                    >
+                                      Eliminar
+                                    </Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid gap-4 xl:grid-cols-2">
+                      {pagedJobs.map((job) => (
+                        <article key={job.id} className="rounded-2xl border border-slate-200 bg-[#fcfdff] p-5">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="text-lg font-semibold text-slate-900">{job.title}</h3>
+                                <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-600">{job.status}</span>
+                              </div>
+                              <p className="mt-1 text-sm text-slate-500">{job.location || "Ubicación flexible"} · {employmentTypeLabel[job.employmentType]} · {seniorityLabel[job.seniority]}</p>
                             </div>
-                            <p className="mt-1 text-sm text-slate-500">{job.location || "Ubicacion flexible"} · {employmentTypeLabel[job.employmentType]} · {seniorityLabel[job.seniority]}</p>
+                            <div className="rounded-2xl bg-slate-50 px-3 py-2 text-right">
+                              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Postulantes</p>
+                              <p className="text-2xl font-bold text-slate-900">{job.applicantsCount}</p>
+                            </div>
                           </div>
-                          <div className="rounded-2xl bg-slate-50 px-3 py-2 text-right">
-                            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Postulantes</p>
-                            <p className="text-2xl font-bold text-slate-900">{job.applicantsCount}</p>
+                          <p className="mt-4 text-sm leading-6 text-slate-600">{job.description}</p>
+                          {job.requirements ? <p className="mt-3 text-sm text-slate-500"><span className="font-semibold text-slate-700">Requisitos:</span> {job.requirements}</p> : null}
+                          {job.benefits ? <p className="mt-2 text-sm text-slate-500"><span className="font-semibold text-slate-700">Beneficios:</span> {job.benefits}</p> : null}
+                          <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-500">
+                            <span className="rounded-full bg-slate-100 px-3 py-1">Límite: {formatDate(job.applicationDeadline)}</span>
+                            <span className="rounded-full bg-slate-100 px-3 py-1">Actualizado: {formatDate(job.updatedAt)}</span>
                           </div>
-                        </div>
-                        <p className="mt-4 text-sm leading-6 text-slate-600">{job.description}</p>
-                        {job.requirements ? <p className="mt-3 text-sm text-slate-500"><span className="font-semibold text-slate-700">Requisitos:</span> {job.requirements}</p> : null}
-                        {job.benefits ? <p className="mt-2 text-sm text-slate-500"><span className="font-semibold text-slate-700">Beneficios:</span> {job.benefits}</p> : null}
-                        <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-500">
-                          <span className="rounded-full bg-slate-100 px-3 py-1">Limite: {formatDate(job.applicationDeadline)}</span>
-                          <span className="rounded-full bg-slate-100 px-3 py-1">Actualizado: {formatDate(job.updatedAt)}</span>
-                        </div>
-                        <div className="mt-5 flex flex-wrap gap-2">
-                          <Button size="sm" variant="secondary" onClick={() => openEditModal(job)}>Editar</Button>
-                          {job.status !== "paused" ? (
-                            <Button size="sm" variant="outline" onClick={() => void handleJobStatus(job, "paused")}>Pausar</Button>
-                          ) : (
-                            <Button size="sm" variant="outline" onClick={() => void handleJobStatus(job, "active")}>Activar</Button>
-                          )}
-                          <Button size="sm" variant="outline" onClick={() => void handleJobStatus(job, "closed")}>Cerrar</Button>
-                          <Button size="sm" variant="ghost" onClick={() => void handleDeleteJob(job.id)}>Eliminar</Button>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                )}
+                          <div className="mt-5 flex flex-wrap gap-2">
+                            <Button size="sm" variant="secondary" onClick={() => openEditModal(job)}>Editar</Button>
+                            {job.status !== "paused" ? (
+                              <Button size="sm" variant="outline" onClick={() => void handleJobStatus(job, "paused")}>Pausar</Button>
+                            ) : (
+                              <Button size="sm" variant="outline" onClick={() => void handleJobStatus(job, "active")}>Activar</Button>
+                            )}
+                            <Button size="sm" variant="outline" onClick={() => void handleJobStatus(job, "closed")}>Cerrar</Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() =>
+                                setConfirm({
+                                  title: "Eliminar oportunidad",
+                                  message: "Esta acción es destructiva y eliminará la oportunidad y sus postulaciones asociadas.",
+                                  actionLabel: "Eliminar",
+                                  onConfirm: () => void handleDeleteJob(job.id),
+                                })
+                              }
+                            >
+                              Eliminar
+                            </Button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </section>
             ) : null}
 
             {tab === "applicants" ? (
               <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
-                  <div className="lg:flex-1">
-                    <h2 className="text-xl font-bold text-slate-900">Gestion de postulantes</h2>
-                    <p className="mt-1 text-sm text-slate-500">Filtra por experiencia, habilidades o estado para priorizar candidatos.</p>
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-900">Gestión de postulantes</h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Busca en tiempo real y prioriza candidatos por estado, oportunidad y señales de experiencia.
+                    </p>
                   </div>
-                  <div className="grid gap-3 md:grid-cols-2 lg:w-[820px] lg:grid-cols-3">
-                    <Input value={filters.query} onChange={(e) => setFilters((prev) => ({ ...prev, query: e.target.value }))} placeholder="Buscar por nombre o ubicación" />
-                    <Input value={filters.skills} onChange={(e) => setFilters((prev) => ({ ...prev, skills: e.target.value }))} placeholder="Habilidades (ej. React, SQL)" />
-                    <Input value={filters.experience} onChange={(e) => setFilters((prev) => ({ ...prev, experience: e.target.value }))} placeholder="Experiencia (ej. 2 años, senior)" />
-                    <Select value={filters.status} onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}>
-                      <option value="all">Todos los estados</option>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant={applicantsView === "table" ? "primary" : "secondary"}
+                      onClick={() => setApplicantsView("table")}
+                    >
+                      Tabla
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={applicantsView === "cards" ? "primary" : "secondary"}
+                      onClick={() => setApplicantsView("cards")}
+                    >
+                      Tarjetas
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => void loadApplicants()}>
+                      Recargar
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="mt-5 grid gap-3 lg:grid-cols-12">
+                  <div className="lg:col-span-4">
+                    <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      Buscar
+                    </label>
+                    <Input value={applicantsQuery} onChange={(e) => { setApplicantsQuery(e.target.value); setApplicantsPage(1); }} placeholder="Nombre, email, cargo, ubicación…" />
+                  </div>
+                  <div className="lg:col-span-3">
+                    <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      Habilidades
+                    </label>
+                    <Input value={applicantsSkills} onChange={(e) => { setApplicantsSkills(e.target.value); setApplicantsPage(1); }} placeholder="Ej. React, SQL, Node" />
+                  </div>
+                  <div className="lg:col-span-3">
+                    <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      Experiencia
+                    </label>
+                    <Input value={applicantsExperience} onChange={(e) => { setApplicantsExperience(e.target.value); setApplicantsPage(1); }} placeholder="Ej. 2 años, senior, lead" />
+                  </div>
+                  <div className="lg:col-span-2">
+                    <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      Estado
+                    </label>
+                    <Select value={applicantsStatus} onChange={(e) => { setApplicantsStatus(e.target.value as any); setApplicantsPage(1); }}>
+                      <option value="all">Todos</option>
                       <option value="submitted">Recibida</option>
                       <option value="accepted">Aceptada</option>
                       <option value="rejected">Rechazada</option>
                       <option value="withdrawn">Retirada</option>
                     </Select>
-                    <Select value={filters.jobId} onChange={(e) => setFilters((prev) => ({ ...prev, jobId: e.target.value }))}>
-                      <option value="all">Todas las oportunidades</option>
-                      {jobs.map((job) => <option key={job.id} value={String(job.id)}>{job.title}</option>)}
+                  </div>
+                  <div className="lg:col-span-4">
+                    <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      Oportunidad
+                    </label>
+                    <Select value={applicantsJobId} onChange={(e) => { setApplicantsJobId(e.target.value); setApplicantsPage(1); }}>
+                      <option value="all">Todas</option>
+                      {jobs.map((job) => (
+                        <option key={job.id} value={String(job.id)}>
+                          {job.title}
+                        </option>
+                      ))}
                     </Select>
                   </div>
-                  <Button variant="secondary" onClick={() => void loadApplicants(filters)}>Aplicar filtros</Button>
+                  <div className="lg:col-span-2">
+                    <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      Por página
+                    </label>
+                    <Select value={String(applicantsPageSize)} onChange={(e) => { setApplicantsPageSize(Number(e.target.value)); setApplicantsPage(1); }}>
+                      <option value="10">10</option>
+                      <option value="25">25</option>
+                      <option value="50">50</option>
+                    </Select>
+                  </div>
                 </div>
 
-                <div className="mt-6 space-y-4">
-                  {applicants.map((item) => (
-                    <article key={item.id} className="rounded-2xl border border-slate-200 p-5">
-                      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="text-lg font-semibold text-slate-900">{item.fullName || item.talentEmail}</h3>
-                            <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-600">{item.status}</span>
-                          </div>
-                          <p className="text-sm text-slate-500">{item.jobTitle} · {item.location || "Ubicacion no indicada"} · {formatDateTime(item.createdAt)}</p>
-                          {item.headline ? <p className="text-sm text-slate-600">{item.headline}</p> : null}
-                          {item.coverLetter ? <p className="text-sm text-slate-600"><span className="font-semibold text-slate-800">Motivacion:</span> {item.coverLetter}</p> : null}
-                          {item.careerInterests?.length ? (
-                            <div className="flex flex-wrap gap-2 pt-1">
-                              {item.careerInterests.map((interest) => (
-                                <span key={interest} className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">{interest}</span>
-                              ))}
-                            </div>
-                          ) : null}
-                          <div className="flex flex-wrap gap-2 text-xs text-slate-500">
-                            {item.cvTitles.map((cv) => <span key={cv} className="rounded-full bg-slate-100 px-3 py-1">{cv}</span>)}
-                            {item.linkedin ? <a className="rounded-full bg-slate-100 px-3 py-1 hover:text-slate-900" href={item.linkedin} target="_blank" rel="noreferrer">LinkedIn</a> : null}
-                            {item.github ? <a className="rounded-full bg-slate-100 px-3 py-1 hover:text-slate-900" href={item.github} target="_blank" rel="noreferrer">GitHub</a> : null}
-                            {item.portfolio ? <a className="rounded-full bg-slate-100 px-3 py-1 hover:text-slate-900" href={item.portfolio} target="_blank" rel="noreferrer">Portafolio</a> : null}
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap gap-2 xl:w-[260px] xl:justify-end">
-                          <Button size="sm" variant="secondary" onClick={() => void handleApplicantStatus(item.id, "accepted")}>Aceptar</Button>
-                          <Button size="sm" variant="outline" onClick={() => void handleApplicantStatus(item.id, "rejected")}>Rechazar</Button>
-                          <Button size="sm" variant="outline" onClick={() => void openApplicantDetail(item.id)}>Ver perfil</Button>
-                          <Button size="sm" variant="outline" onClick={() => void handleContactApplicant(item.id)}>Contactar</Button>
-                        </div>
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm text-slate-500">
+                    Mostrando <span className="font-semibold text-slate-800">{pagedApplicants.length}</span> de{" "}
+                    <span className="font-semibold text-slate-800">{filteredApplicants.length}</span> postulaciones
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="secondary" disabled={applicantsPage <= 1} onClick={() => setApplicantsPage((p) => Math.max(1, p - 1))}>
+                      Anterior
+                    </Button>
+                    <span className="text-sm text-slate-600">
+                      Página {applicantsPage} / {applicantsTotalPages}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={applicantsPage >= applicantsTotalPages}
+                      onClick={() => setApplicantsPage((p) => Math.min(applicantsTotalPages, p + 1))}
+                    >
+                      Siguiente
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="mt-5">
+                  {filteredApplicants.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
+                      <p className="text-lg font-semibold text-slate-900">Sin postulantes para mostrar</p>
+                      <p className="mt-2 text-sm text-slate-500">Ajusta los filtros o publica una oportunidad para empezar a recibir candidaturas.</p>
+                    </div>
+                  ) : applicantsView === "table" ? (
+                    <div className="overflow-hidden rounded-2xl border border-slate-200">
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full text-left text-sm">
+                          <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                            <tr>
+                              <th className="px-4 py-3">Candidato</th>
+                              <th className="px-4 py-3">Oportunidad</th>
+                              <th className="px-4 py-3">Estado</th>
+                              <th className="px-4 py-3">Fecha</th>
+                              <th className="px-4 py-3 text-right">Acciones</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200">
+                            {pagedApplicants.map((item) => (
+                              <tr key={item.id} className="bg-white">
+                                <td className="px-4 py-3">
+                                  <div className="font-semibold text-slate-900">{item.fullName || item.talentEmail}</div>
+                                  <div className="text-xs text-slate-500">{item.talentEmail}</div>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div className="text-slate-900">{item.jobTitle}</div>
+                                  <div className="text-xs text-slate-500">{item.location || "Ubicación no indicada"}</div>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-600">{item.status}</span>
+                                </td>
+                                <td className="px-4 py-3 text-slate-600">{formatDateTime(item.createdAt)}</td>
+                                <td className="px-4 py-3">
+                                  <div className="flex flex-wrap justify-end gap-2">
+                                    <Button size="sm" variant="secondary" onClick={() => void handleApplicantStatus(item.id, "accepted")}>Aceptar</Button>
+                                    <Button size="sm" variant="outline" onClick={() => void handleApplicantStatus(item.id, "rejected")}>Rechazar</Button>
+                                    <Button size="sm" variant="outline" onClick={() => void openApplicantDetail(item.id)}>Ver perfil</Button>
+                                    <Button size="sm" variant="outline" onClick={() => void handleContactApplicant(item.id)}>Contactar</Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
-                    </article>
-                  ))}
-                  {!applicants.length ? <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">No hay postulantes con los filtros actuales.</div> : null}
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {pagedApplicants.map((item) => (
+                        <article key={item.id} className="rounded-2xl border border-slate-200 p-5">
+                          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                            <div className="space-y-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="text-lg font-semibold text-slate-900">{item.fullName || item.talentEmail}</h3>
+                                <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-600">{item.status}</span>
+                              </div>
+                              <p className="text-sm text-slate-500">{item.jobTitle} · {item.location || "Ubicación no indicada"} · {formatDateTime(item.createdAt)}</p>
+                              {item.headline ? <p className="text-sm text-slate-600">{item.headline}</p> : null}
+                              {item.coverLetter ? <p className="text-sm text-slate-600"><span className="font-semibold text-slate-800">Motivación:</span> {item.coverLetter}</p> : null}
+                              {item.careerInterests?.length ? (
+                                <div className="flex flex-wrap gap-2 pt-1">
+                                  {item.careerInterests.map((interest) => (
+                                    <span key={interest} className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">{interest}</span>
+                                  ))}
+                                </div>
+                              ) : null}
+                              <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+                                {item.cvTitles.map((cv) => <span key={cv} className="rounded-full bg-slate-100 px-3 py-1">{cv}</span>)}
+                                {item.linkedin ? <a className="rounded-full bg-slate-100 px-3 py-1 hover:text-slate-900" href={item.linkedin} target="_blank" rel="noreferrer">LinkedIn</a> : null}
+                                {item.github ? <a className="rounded-full bg-slate-100 px-3 py-1 hover:text-slate-900" href={item.github} target="_blank" rel="noreferrer">GitHub</a> : null}
+                                {item.portfolio ? <a className="rounded-full bg-slate-100 px-3 py-1 hover:text-slate-900" href={item.portfolio} target="_blank" rel="noreferrer">Portafolio</a> : null}
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2 xl:w-[260px] xl:justify-end">
+                              <Button size="sm" variant="secondary" onClick={() => void handleApplicantStatus(item.id, "accepted")}>Aceptar</Button>
+                              <Button size="sm" variant="outline" onClick={() => void handleApplicantStatus(item.id, "rejected")}>Rechazar</Button>
+                              <Button size="sm" variant="outline" onClick={() => void openApplicantDetail(item.id)}>Ver perfil</Button>
+                              <Button size="sm" variant="outline" onClick={() => void handleContactApplicant(item.id)}>Contactar</Button>
+                            </div>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </section>
             ) : null}
@@ -929,6 +1396,72 @@ export function DashboardCompanyPage() {
                     <div className="flex min-h-[420px] items-center justify-center px-6 text-center text-sm text-slate-500">Selecciona una conversacion para ver mensajes, compartir archivos o programar entrevistas.</div>
                   )}
                 </div>
+              </section>
+            ) : null}
+
+            {tab === "profile" ? (
+              <section className="grid gap-6 lg:grid-cols-[1fr,360px]">
+                <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <h2 className="text-xl font-bold text-slate-900">Perfil de empresa</h2>
+                      <p className="mt-1 text-sm text-slate-500">Mantén tus datos actualizados para mejorar la calidad de postulaciones y el cumplimiento.</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="secondary" onClick={() => navigate(routes.companyOnboarding)}>
+                        Editar datos
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 grid gap-4 md:grid-cols-2">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Datos generales</p>
+                      <div className="mt-3 space-y-2 text-sm text-slate-700">
+                        <p><span className="font-semibold text-slate-900">Nombre comercial:</span> {profile?.companyName || "Pendiente"}</p>
+                        <p><span className="font-semibold text-slate-900">Descripción:</span> {profile?.description || "Pendiente"}</p>
+                        <p><span className="font-semibold text-slate-900">Ubicación:</span> {profile?.location || "Pendiente"}</p>
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Datos fiscales</p>
+                      <div className="mt-3 space-y-2 text-sm text-slate-700">
+                        <p><span className="font-semibold text-slate-900">Razón social:</span> {profile?.legalName || "Pendiente"}</p>
+                        <p><span className="font-semibold text-slate-900">Identificación:</span> {profile?.taxId || "Pendiente"}</p>
+                        <p><span className="font-semibold text-slate-900">Tamaño:</span> {profile?.companySize || "Pendiente"}</p>
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Actividad</p>
+                      <div className="mt-3 space-y-2 text-sm text-slate-700">
+                        <p><span className="font-semibold text-slate-900">Industria:</span> {profile?.industry || "Pendiente"}</p>
+                        <p><span className="font-semibold text-slate-900">Sector:</span> {profile?.activitySector || "Pendiente"}</p>
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Verificación</p>
+                      <div className="mt-3 space-y-2 text-sm text-slate-700">
+                        <p><span className="font-semibold text-slate-900">Estado:</span> {profile?.verificationStatus === "verified" ? "Verificada" : "Pendiente"}</p>
+                        <p className="text-xs text-slate-500">La verificación habilita más confianza y reduce fricción al contactar candidatos.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <aside className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Atajos</p>
+                  <div className="mt-4 space-y-2">
+                    <Button variant="outline" className="w-full justify-center" onClick={() => setTab("jobs")}>
+                      Ir a oportunidades
+                    </Button>
+                    <Button variant="outline" className="w-full justify-center" onClick={() => setTab("applicants")}>
+                      Ir a postulantes
+                    </Button>
+                    <Button variant="outline" className="w-full justify-center" onClick={() => setTab("chat")}>
+                      Ir a chat
+                    </Button>
+                  </div>
+                </aside>
               </section>
             ) : null}
           </div>
