@@ -40,7 +40,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
     if (hasOAuthSignal) {
       const key = "firststep.oauth.returnTo";
       const stored = localStorage.getItem(key);
-      const allowed = stored === routes.login || stored === routes.companySignUp ? stored : routes.login;
+      const allowed = stored === routes.login || stored === routes.companySignUp || stored === routes.companyLogin ? stored : routes.login;
       if (stored) localStorage.removeItem(key);
 
       if (url.pathname !== allowed) {
