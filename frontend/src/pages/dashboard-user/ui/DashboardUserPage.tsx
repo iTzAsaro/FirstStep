@@ -15,6 +15,9 @@ import { useLogout } from "@/features/auth/logout/model/useLogout";
 import { routes } from "@/shared/config/routes";
 import { Button } from "@/shared/ui";
 
+const FEATURE_CV_BUILDER = import.meta.env.VITE_FEATURE_CV_BUILDER !== "false";
+const FEATURE_AI_CHAT = import.meta.env.VITE_FEATURE_AI_CHAT !== "false";
+
 type ActivityItem = {
   text: string;
   time: string;
@@ -252,7 +255,7 @@ export function DashboardUserPage() {
       onClick: () => navigate(routes.onboarding),
       state: hasLocation && hasEducation && hasInterests ? "Listo" : "Recomendado",
     },
-    {
+    ...(FEATURE_CV_BUILDER ? [{
       title: "Crea tu CV con IA",
       description: recentCvs.length > 0
         ? "Retoma tu currículum y ajústalo para tu próxima aplicación."
@@ -260,7 +263,7 @@ export function DashboardUserPage() {
       action: recentCvs.length > 0 ? "Continuar CV" : "Crear CV",
       onClick: () => navigate(routes.cvBuilder),
       state: recentCvs.length > 0 ? "En progreso" : "Prioridad",
-    },
+    }] : []),
     {
       title: "Practica entrevistas",
       description: recentSessions.some((sessionItem) => sessionItem.kind === "interview")
@@ -415,7 +418,7 @@ export function DashboardUserPage() {
                 { label: "Oportunidades", path: routes.opportunities },
                 { label: "Empresas", path: routes.companies },
                 { label: "Mensajes", path: routes.messages },
-                { label: "IA", path: routes.chat },
+                ...(FEATURE_AI_CHAT ? [{ label: "IA", path: routes.chat }] : []),
               ].map((item) => (
                 <button
                   key={item.label}
@@ -433,13 +436,15 @@ export function DashboardUserPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => navigate(routes.cvBuilder)}
-              className="hidden sm:inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-[#1e3456] shadow-sm transition-colors hover:border-[#294266] hover:text-[#294266]"
-            >
-              Mejorar CV
-            </button>
+            {FEATURE_CV_BUILDER && (
+              <button
+                type="button"
+                onClick={() => navigate(routes.cvBuilder)}
+                className="hidden sm:inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-[#1e3456] shadow-sm transition-colors hover:border-[#294266] hover:text-[#294266]"
+              >
+                Mejorar CV
+              </button>
+            )}
             <button
               type="button"
               onClick={logout}
@@ -498,22 +503,24 @@ export function DashboardUserPage() {
                 >
                   Completar mi perfil
                 </button>
+                {FEATURE_CV_BUILDER && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="rounded-full border border-white/15 bg-white/10 px-5 py-3 text-sm font-semibold text-white hover:bg-white/15"
+                    onClick={() => navigate(routes.cvBuilder)}
+                  >
+                    Crear CV con IA
+                  </Button>
+                )}
                 <Button
-                  type="button"
-                  variant="secondary"
-                  className="rounded-full border border-white/15 bg-white/10 px-5 py-3 text-sm font-semibold text-white hover:bg-white/15"
-                  onClick={() => navigate(routes.cvBuilder)}
-                >
-                  Crear CV con IA
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="rounded-full border border-white/15 bg-white/10 px-5 py-3 text-sm font-semibold text-white hover:bg-white/15"
-                  onClick={() => navigate(routes.interview)}
-                >
-                  Practicar entrevista
-                </Button>
+                    type="button"
+                    variant="secondary"
+                    className="rounded-full border border-white/15 bg-white/10 px-5 py-3 text-sm font-semibold text-white hover:bg-white/15"
+                    onClick={() => navigate(routes.interview)}
+                  >
+                    Practicar entrevista
+                  </Button>
               </div>
             </div>
 
@@ -655,13 +662,15 @@ export function DashboardUserPage() {
                       Sesiones recientes
                     </h2>
                   </div>
-                  <button
-                    type="button"
-                    className="text-xs font-semibold text-[#294266] hover:underline"
-                    onClick={() => navigate(routes.chat)}
-                  >
-                    Abrir chat
-                  </button>
+                  {FEATURE_AI_CHAT && (
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-[#294266] hover:underline"
+                      onClick={() => navigate(routes.chat)}
+                    >
+                      Abrir chat
+                    </button>
+                  )}
                 </div>
 
                 <div className="overflow-hidden rounded-[1.5rem] border border-slate-100 bg-slate-50/40">
@@ -693,6 +702,7 @@ export function DashboardUserPage() {
                 </div>
               </div>
 
+              {FEATURE_CV_BUILDER && (
               <div className="rounded-[2rem] border border-white/80 bg-white p-6 shadow-sm sm:p-7">
                 <div className="mb-6 flex items-end justify-between gap-4">
                   <div>
@@ -738,6 +748,7 @@ export function DashboardUserPage() {
                   )}
                 </div>
               </div>
+              )}
             </section>
           </div>
 
@@ -793,7 +804,7 @@ export function DashboardUserPage() {
 
               <div className="mt-6 space-y-3">
                 {[
-                  { label: "Perfeccionar CV con IA", action: () => navigate(routes.cvBuilder) },
+                  ...(FEATURE_CV_BUILDER ? [{ label: "Perfeccionar CV con IA", action: () => navigate(routes.cvBuilder) }] : []),
                   { label: "Entrenar entrevista", action: () => navigate(routes.interview) },
                   { label: "Actualizar perfil", action: () => navigate(routes.onboarding) },
                 ].map((item) => (

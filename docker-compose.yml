@@ -53,6 +53,8 @@ services:
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-https://xhklhawelqtmxcoqznup.supabase.co}
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-sb_publishable_EYbYaXxLNO0yFRZF_R2YEQ_G965JvWQ}
         VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY:-}
+        VITE_FEATURE_CV_BUILDER: ${VITE_FEATURE_CV_BUILDER:-false}
+        VITE_FEATURE_AI_CHAT: ${VITE_FEATURE_AI_CHAT:-true}
     container_name: firststep-frontend
     restart: unless-stopped
     ports:
