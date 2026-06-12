@@ -27,6 +27,9 @@ import { SignUpCompanyPage } from "@/pages/signup-company";
 import { SignUpTalentPage } from "@/pages/signup-talent";
 import { routes } from "@/shared/config/routes";
 
+const FEATURE_CV_BUILDER = import.meta.env.VITE_FEATURE_CV_BUILDER !== "false";
+const FEATURE_AI_CHAT = import.meta.env.VITE_FEATURE_AI_CHAT !== "false";
+
 /**
  * Router principal de la aplicación.
  *
@@ -97,22 +100,26 @@ export function AppRouter() {
           </ProtectedRoute>
         }
       />
-      <Route
-        path={routes.cvBuilder}
-        element={
-          <ProtectedRoute requiredRole="talento">
-            <CvBuilderPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path={routes.chat}
-        element={
-          <ProtectedRoute requiredRole="talento">
-            <ChatPage />
-          </ProtectedRoute>
-        }
-      />
+      {FEATURE_CV_BUILDER && (
+        <Route
+          path={routes.cvBuilder}
+          element={
+            <ProtectedRoute requiredRole="talento">
+              <CvBuilderPage />
+            </ProtectedRoute>
+          }
+        />
+      )}
+      {FEATURE_AI_CHAT && (
+        <Route
+          path={routes.chat}
+          element={
+            <ProtectedRoute requiredRole="talento">
+              <ChatPage />
+            </ProtectedRoute>
+          }
+        />
+      )}
       <Route
         path={routes.messages}
         element={
