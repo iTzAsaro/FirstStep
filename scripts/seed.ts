@@ -305,7 +305,7 @@ async function main() {
     // ── 4. Crear postulaciones ─────────────────────────────────────────
     console.log(`\n📨  Creando postulaciones (~${APPLICATIONS_PER_JOB} por oferta)...`);
     let appCount = 0;
-    const statuses = ["submitted","submitted","submitted","accepted","rejected"] as const;
+    const statuses = ["submitted","submitted","submitted","accepted","rejected"] as string[];
 
     for (const jobId of jobIds) {
       const applicants = pickN(talentIds, Math.min(APPLICATIONS_PER_JOB, talentIds.length));
@@ -327,7 +327,7 @@ async function main() {
 
     // ── 5. Crear sesiones IA ───────────────────────────────────────────
     console.log(`\n🤖  Creando sesiones IA de muestra...`);
-    const sessionKinds = ["general","interview"] as const;
+    const sessionKinds = ["general","interview"] as string[];
     const models = ["llama3.2","mistral","gemma2"];
     let sessionCount = 0;
 
@@ -341,7 +341,7 @@ async function main() {
            RETURNING id`,
           [
             talentId,
-            kind,
+            kind as string,
             kind === "interview" ? `Simulación: ${pick(["Desarrollador Frontend","Data Analyst","UX Designer"])}` : "Chat de orientación profesional",
             pick(models),
             kind === "interview" ? pick(["Desarrollador Frontend","Analista de Datos","Diseñador UX"]) : null,
