@@ -5,7 +5,7 @@
 // ║ Creado:      20-05-2026                                              ║
 // ╚══════════════════════════════════════════════════════════════════════╝
 
-import type { OllamaChatChunk, OllamaChatRequest, OllamaMessage, OllamaTagsResponse } from "@/shared/api/ollama/types";
+import type { OllamaChatChunk, OllamaChatRequest, OllamaMessage, OllamaOptions, OllamaTagsResponse } from "@/shared/api/ollama/types";
 
 export type OllamaClientConfig = {
   baseUrl?: string;
@@ -14,6 +14,7 @@ export type OllamaClientConfig = {
 export type StreamChatParams = {
   model: string;
   messages: OllamaMessage[];
+  options?: OllamaOptions;
   signal?: AbortSignal;
   onToken: (token: string) => void;
   onDone?: () => void;
@@ -119,6 +120,7 @@ export function createOllamaClient(config: OllamaClientConfig = {}) {
       model: params.model,
       messages: params.messages,
       stream: true,
+      options: params.options,
     };
 
     let res: Response;

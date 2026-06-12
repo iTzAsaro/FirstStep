@@ -19,12 +19,23 @@ export type OllamaMessage = {
 };
 
 /**
+ * Opciones de generación soportadas por /api/chat (subset).
+ * num_predict limita la cantidad máxima de tokens generados,
+ * evitando respuestas interminables en hardware lento (CPU-only).
+ */
+export type OllamaOptions = {
+  num_predict?: number;
+  temperature?: number;
+};
+
+/**
  * Request de chat (streaming) para Ollama.
  */
 export type OllamaChatRequest = {
   model: string;
   messages: OllamaMessage[];
   stream: true;
+  options?: OllamaOptions;
 };
 
 /**

@@ -1,32 +1,9 @@
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║ docker-compose.yml — FirstStep  (desarrollo local)                   ║
+# ║ DB: Supabase (nube) — no se levanta PostgreSQL local                 ║
 # ╚══════════════════════════════════════════════════════════════════════╝
 
-version: "3.9"
-
 services:
-
-  # ── DB: PostgreSQL (desarrollo local) ──────────────────────────────────
-  db:
-    image: postgres:16
-    container_name: firststep-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: firststep
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-      - ./backend/sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
-    networks:
-      - firststep-net
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d firststep"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
 
   # ── Backend: Node.js + Express + TypeScript ────────────────────────────
   backend:
@@ -56,13 +33,10 @@ services:
       SUPABASE_JWKS_URL: ${SUPABASE_JWKS_URL:-https://xhklhawelqtmxcoqznup.supabase.co/auth/v1/.well-known/jwks.json}
       SUPABASE_JWKS_BASE64: ${SUPABASE_JWKS_BASE64:-eyJrZXlzIjpbeyJhbGciOiJFUzI1NiIsImNydiI6IlAtMjU2IiwiZXh0Ijp0cnVlLCJrZXlfb3BzIjpbInZlcmlmeSJdLCJraWQiOiI5MGVjYTE3Ni1hMDgxLTQ2ZDctOWM5YS01Y2ZkNjJmY2ZjYTMiLCJrdHkiOiJFQyIsInVzZSI6InNpZyIsIngiOiJOZGRtSUh5RnI0dnZzbTMwWk9qdS1jWEpFR2M0NlhRMEJOVHpTNDJ3a0gwIiwieSI6Im5YZnczbkx1Rjl1RWhiOTFtVGpRZDV0NlNQS2tuUUhxLUl1aDhzUmdGOUEifV19}
       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
-    depends_on:
-      db:
-        condition: service_healthy
     networks:
       - firststep-net
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      test: [ "CMD", "wget", "-qO-", "http://localhost:3001/health" ]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -89,7 +63,7 @@ services:
     networks:
       - firststep-net
 
-  # ── Ollama: LLM local ─────────────────────────────────────────────────
+  # ── Ollama: LLM local (CPU-only, sin CUDA) ────────────────────────────
   ollama:
     image: ollama/ollama:latest
     container_name: firststep-ollama
@@ -108,4 +82,3 @@ networks:
 
 volumes:
   ollama-data:
-  postgres-data:

@@ -29,6 +29,8 @@ export function OpportunitiesTopNav({ onLogout }: Props) {
             {[
               { label: "Resumen", path: routes.dashboard },
               { label: "Oportunidades", path: routes.opportunities },
+              { label: "Empresas", path: routes.companies },
+              { label: "Mensajes", path: routes.messages },
               { label: "IA", path: routes.chat },
             ].map((item) => (
               <button

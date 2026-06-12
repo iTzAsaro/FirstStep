@@ -171,11 +171,11 @@ export class CompanyProfileRepository {
 
     const where = `
       WHERE u.role = 'empresa'
-        AND (:query IS NULL OR LOWER(cp.company_name) LIKE :query OR LOWER(cp.legal_name) LIKE :query)
-        AND (:industry IS NULL OR LOWER(cp.industry) LIKE :industry OR LOWER(cp.activity_sector) LIKE :industry)
-        AND (:location IS NULL OR LOWER(cp.location) LIKE :location)
-        AND (:companySize IS NULL OR cp.company_size = :companySize)
-        AND (:verified IS NULL OR (cp.verification_status = 'verified') = :verified)
+        AND (:query::text IS NULL OR LOWER(cp.company_name) LIKE :query OR LOWER(cp.legal_name) LIKE :query)
+        AND (:industry::text IS NULL OR LOWER(cp.industry) LIKE :industry OR LOWER(cp.activity_sector) LIKE :industry)
+        AND (:location::text IS NULL OR LOWER(cp.location) LIKE :location)
+        AND (:companySize::text IS NULL OR cp.company_size = :companySize)
+        AND (:verified::boolean IS NULL OR (cp.verification_status = 'verified') = :verified)
     `;
 
     const countRow = await this.db.queryOne<any>(

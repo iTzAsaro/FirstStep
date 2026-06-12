@@ -21,7 +21,7 @@ export default {
         changeOrigin: true,
       },
       "/ollama": {
-        target: "http://localhost:11434",
+        target: "http://127.0.0.1:11434",
         changeOrigin: true,
         timeout: 600_000,
         proxyTimeout: 600_000,

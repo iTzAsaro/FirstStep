@@ -414,6 +414,7 @@ export function DashboardUserPage() {
                 { label: "Resumen", path: routes.dashboard },
                 { label: "Oportunidades", path: routes.opportunities },
                 { label: "Empresas", path: routes.companies },
+                { label: "Mensajes", path: routes.messages },
                 { label: "IA", path: routes.chat },
               ].map((item) => (
                 <button
@@ -490,13 +491,13 @@ export function DashboardUserPage() {
               </div>
 
               <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                <Button
+                <button
                   type="button"
-                  className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#1e3456] hover:bg-blue-50"
+                  className="inline-flex items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#1e3456] transition-colors hover:bg-blue-50"
                   onClick={() => navigate(routes.onboarding)}
                 >
                   Completar mi perfil
-                </Button>
+                </button>
                 <Button
                   type="button"
                   variant="secondary"

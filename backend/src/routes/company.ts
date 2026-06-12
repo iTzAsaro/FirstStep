@@ -244,7 +244,7 @@ export function createCompanyRouter(ctx: AppContext) {
          JOIN talent_profiles tp ON tp.user_id = u.id
          WHERE u.role = 'talento'
            AND tp.company_user_id = :companyUserId
-           AND (:q IS NULL OR LOWER(tp.full_name) LIKE :q OR LOWER(tp.headline) LIKE :q OR LOWER(tp.location) LIKE :q)`,
+           AND (:q::text IS NULL OR LOWER(tp.full_name) LIKE :q OR LOWER(tp.headline) LIKE :q OR LOWER(tp.location) LIKE :q)`,
         { companyUserId: req.auth.id, q },
       );
       const total = Number(countRow?.count ?? 0);
@@ -259,7 +259,7 @@ export function createCompanyRouter(ctx: AppContext) {
          JOIN talent_profiles tp ON tp.user_id = u.id
          WHERE u.role = 'talento'
            AND tp.company_user_id = :companyUserId
-           AND (:q IS NULL OR LOWER(tp.full_name) LIKE :q OR LOWER(tp.headline) LIKE :q OR LOWER(tp.location) LIKE :q)
+           AND (:q::text IS NULL OR LOWER(tp.full_name) LIKE :q OR LOWER(tp.headline) LIKE :q OR LOWER(tp.location) LIKE :q)
          ORDER BY tp.updated_at DESC
          LIMIT :limit OFFSET :offset`,
         { companyUserId: req.auth.id, q, limit: pageSize, offset },
