@@ -45,7 +45,7 @@ export function useCompleteOnboarding() {
     const accessToken = data.session?.access_token ?? null;
     if (!accessToken) return null;
 
-    const res = await fetch("/api/auth/login/oauth", {
+    const res = await fetch("/api/talento/login/oauth", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -76,7 +76,7 @@ export function useCompleteOnboarding() {
         careerInterests: string[];
       },
     ) => {
-      return await fetch("/api/talent/onboarding", {
+      return await fetch("/api/talento/onboarding", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,

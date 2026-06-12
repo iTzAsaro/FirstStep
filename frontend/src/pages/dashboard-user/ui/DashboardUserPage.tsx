@@ -87,18 +87,19 @@ export function DashboardUserPage() {
 
   useEffect(() => {
     let alive = true;
-    const token = localStorage.getItem("firststep.api.accessToken") ?? "";
-    if (!token) {
-      setIsLoading(false);
-      setLoadError("No hay sesión válida. Vuelve a iniciar sesión.");
-      return;
-    }
 
     const loadDashboard = async () => {
+      const token = localStorage.getItem("firststep.api.accessToken") ?? "";
+      if (!token) {
+        if (!alive) return;
+        setIsLoading(false);
+        setLoadError("No hay sesión válida. Vuelve a iniciar sesión.");
+        return;
+      }
       try {
         setIsLoading(true);
         setLoadError(null);
-        const res = await fetch("/api/talent/dashboard", {
+        const res = await fetch("/api/talento/dashboard", {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) {
@@ -121,10 +122,17 @@ export function DashboardUserPage() {
     };
 
     const loadJobs = async () => {
+      const token = localStorage.getItem("firststep.api.accessToken") ?? "";
+      if (!token) {
+        if (!alive) return;
+        setJobsLoading(false);
+        setJobsError("No hay sesión válida. Vuelve a iniciar sesión.");
+        return;
+      }
       try {
         setJobsLoading(true);
         setJobsError(null);
-        const res = await fetch("/api/talent/jobs", {
+        const res = await fetch("/api/talento/jobs", {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) {
@@ -150,8 +158,26 @@ export function DashboardUserPage() {
       await Promise.all([loadDashboard(), loadJobs()]);
     })();
 
+    const refreshOnFocus = () => {
+      if (document.visibilityState === "visible") {
+        void Promise.all([loadDashboard(), loadJobs()]);
+      }
+    };
+
+    const refreshInterval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void Promise.all([loadDashboard(), loadJobs()]);
+      }
+    }, 30000);
+
+    window.addEventListener("focus", refreshOnFocus);
+    document.addEventListener("visibilitychange", refreshOnFocus);
+
     return () => {
       alive = false;
+      window.clearInterval(refreshInterval);
+      window.removeEventListener("focus", refreshOnFocus);
+      document.removeEventListener("visibilitychange", refreshOnFocus);
     };
   }, []);
 
@@ -327,7 +353,7 @@ export function DashboardUserPage() {
                   setApplyLoading(true);
                   setApplyError(null);
                   try {
-                    const res = await fetch(`/api/talent/jobs/${applyModal.jobId}/apply`, {
+                    const res = await fetch(`/api/talento/jobs/${applyModal.jobId}/apply`, {
                       method: "POST",
                       headers: {
                         Authorization: `Bearer ${token}`,
@@ -343,7 +369,7 @@ export function DashboardUserPage() {
                       } catch { }
                       throw new Error(message);
                     }
-                    const jobsRes = await fetch("/api/talent/jobs", { headers: { Authorization: `Bearer ${token}` } });
+                    const jobsRes = await fetch("/api/talento/jobs", { headers: { Authorization: `Bearer ${token}` } });
                     if (jobsRes.ok) {
                       const out = (await jobsRes.json()) as any;
                       setJobs(out.jobs ?? []);
@@ -387,6 +413,7 @@ export function DashboardUserPage() {
               {[
                 { label: "Resumen", path: routes.dashboard },
                 { label: "Oportunidades", path: routes.opportunities },
+                { label: "Empresas", path: routes.companies },
                 { label: "IA", path: routes.chat },
               ].map((item) => (
                 <button

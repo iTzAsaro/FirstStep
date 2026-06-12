@@ -202,7 +202,7 @@ export function SignUpCompanyPage() {
         }
         if (!supabaseAccessToken || !userEmail) throw new Error("No se pudo obtener el access token o email de Supabase.");
 
-        const res = await fetch("/api/auth/login/oauth", {
+        const res = await fetch("/api/empresas/login/oauth", {
           method: "POST",
           headers: {
             Authorization: `Bearer ${supabaseAccessToken}`,
@@ -231,7 +231,7 @@ export function SignUpCompanyPage() {
         if (companyName.trim()) updateBody.companyName = companyName.trim();
         if (companySize.trim()) updateBody.companySize = companySize.trim();
         if (Object.keys(updateBody).length) {
-          await fetch("/api/company/profile", {
+          await fetch("/api/empresas/profile", {
             method: "PUT",
             headers: {
               Authorization: `Bearer ${backendToken}`,
@@ -241,7 +241,7 @@ export function SignUpCompanyPage() {
           }).catch(() => null);
         }
 
-        const profRes = await fetch("/api/company/profile", {
+        const profRes = await fetch("/api/empresas/profile", {
           headers: { Authorization: `Bearer ${backendToken}` },
         });
         const profOut = profRes.ok ? ((await profRes.json()) as any) : null;

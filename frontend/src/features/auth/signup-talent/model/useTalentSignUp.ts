@@ -15,7 +15,7 @@ import { routes } from "@/shared/config/routes";
 /**
  * Registro de talento (API real).
  *
- * - POST /api/auth/register/talent
+ * - POST /api/talento/register
  * - Persiste accessToken para llamadas posteriores
  * - Crea sesión local (UI) y redirige a onboarding
  */
@@ -33,7 +33,7 @@ export function useTalentSignUp() {
       setIsLoading(true);
       setError(null);
       try {
-        const res = await fetch("/api/auth/register/talent", {
+        const res = await fetch("/api/talento/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

@@ -368,7 +368,7 @@ export function DashboardCompanyPage() {
   }
 
   async function loadDashboard() {
-    const out = await fetchJson<{ profile: CompanyProfile | null; stats: DashboardData["stats"]; recentJobs: DashboardData["recentJobs"]; recentApplications: DashboardData["recentApplications"]; onboardingCompleted: boolean }>("/api/company/dashboard");
+    const out = await fetchJson<{ profile: CompanyProfile | null; stats: DashboardData["stats"]; recentJobs: DashboardData["recentJobs"]; recentApplications: DashboardData["recentApplications"]; onboardingCompleted: boolean }>("/api/empresas/dashboard");
     setProfile(out.profile);
     setDashboard({
       stats: out.stats,
@@ -379,23 +379,23 @@ export function DashboardCompanyPage() {
   }
 
   async function loadJobs() {
-    const out = await fetchJson<{ jobs: JobRow[] }>("/api/company/jobs");
+    const out = await fetchJson<{ jobs: JobRow[] }>("/api/empresas/jobs");
     setJobs(out.jobs ?? []);
   }
 
   async function loadApplicants() {
-    const out = await fetchJson<{ applicants: ApplicantRow[] }>("/api/company/applicants");
+    const out = await fetchJson<{ applicants: ApplicantRow[] }>("/api/empresas/applicants");
     setApplicants(out.applicants ?? []);
   }
 
   async function loadConversations() {
-    const out = await fetchJson<{ conversations: ConversationRow[] }>("/api/company/conversations");
+    const out = await fetchJson<{ conversations: ConversationRow[] }>("/api/empresas/conversations");
     setConversations(out.conversations ?? []);
     if (!activeConversationId && out.conversations?.[0]) setActiveConversationId(out.conversations[0].id);
   }
 
   async function loadConversationMessages(conversationId: number) {
-    const out = await fetchJson<{ messages: MessageRow[] }>(`/api/company/conversations/${conversationId}/messages`);
+    const out = await fetchJson<{ messages: MessageRow[] }>(`/api/empresas/conversations/${conversationId}/messages`);
     setMessages(out.messages ?? []);
   }
 
@@ -405,7 +405,7 @@ export function DashboardCompanyPage() {
       setIsBootLoading(false);
       return;
     }
-    (async () => {
+    const refreshAll = async () => {
       try {
         setError(null);
         await Promise.all([loadDashboard(), loadJobs(), loadApplicants(), loadConversations()]);
@@ -414,7 +414,30 @@ export function DashboardCompanyPage() {
       } finally {
         setIsBootLoading(false);
       }
-    })();
+    };
+
+    void refreshAll();
+
+    const refreshOnFocus = () => {
+      if (document.visibilityState === "visible") {
+        void refreshAll();
+      }
+    };
+
+    const refreshInterval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void refreshAll();
+      }
+    }, 30000);
+
+    window.addEventListener("focus", refreshOnFocus);
+    document.addEventListener("visibilitychange", refreshOnFocus);
+
+    return () => {
+      window.clearInterval(refreshInterval);
+      window.removeEventListener("focus", refreshOnFocus);
+      document.removeEventListener("visibilitychange", refreshOnFocus);
+    };
   }, [token]);
 
   useEffect(() => {
@@ -483,7 +506,7 @@ export function DashboardCompanyPage() {
         applicationDeadline: formDeadline ? new Date(formDeadline).toISOString() : null,
       };
       const isEdit = typeof modal === "object" && modal !== null;
-      await fetchJson(isEdit ? `/api/company/jobs/${modal.editId}` : "/api/company/jobs", {
+      await fetchJson(isEdit ? `/api/empresas/jobs/${modal.editId}` : "/api/empresas/jobs", {
         method: isEdit ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -506,7 +529,7 @@ export function DashboardCompanyPage() {
 
   async function handleJobStatus(job: JobRow, nextStatus: JobStatus) {
     try {
-      await fetchJson(`/api/company/jobs/${job.id}`, {
+      await fetchJson(`/api/empresas/jobs/${job.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: nextStatus }),
@@ -519,7 +542,7 @@ export function DashboardCompanyPage() {
 
   async function handleDeleteJob(jobId: number) {
     try {
-      await fetchJson(`/api/company/jobs/${jobId}`, { method: "DELETE" });
+      await fetchJson(`/api/empresas/jobs/${jobId}`, { method: "DELETE" });
       await Promise.all([loadJobs(), loadDashboard(), loadApplicants()]);
       setToast({ kind: "success", title: "Oportunidad eliminada" });
     } catch (e) {
@@ -530,7 +553,7 @@ export function DashboardCompanyPage() {
 
   async function handleApplicantStatus(applicationId: number, status: ApplicantStatus) {
     try {
-      await fetchJson(`/api/company/applicants/${applicationId}/status`, {
+      await fetchJson(`/api/empresas/applicants/${applicationId}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
@@ -545,7 +568,7 @@ export function DashboardCompanyPage() {
 
   async function handleContactApplicant(applicationId: number) {
     try {
-      const out = await fetchJson<{ conversation: ConversationRow }>(`/api/company/applicants/${applicationId}/contact`, {
+      const out = await fetchJson<{ conversation: ConversationRow }>(`/api/empresas/applicants/${applicationId}/contact`, {
         method: "POST",
       });
       setTab("chat");
@@ -571,7 +594,7 @@ export function DashboardCompanyPage() {
         finalAttachmentUrl = uploaded.url;
         finalAttachmentName = finalAttachmentName || uploaded.file.fileName;
       }
-      await fetchJson(`/api/company/conversations/${activeConversationId}/messages`, {
+      await fetchJson(`/api/empresas/conversations/${activeConversationId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -603,7 +626,7 @@ export function DashboardCompanyPage() {
     setError(null);
     try {
       const out = await fetchJson<{ application: any; cvs: Array<{ id: string; title: string; content: string; updatedAt: string }> }>(
-        `/api/company/applicants/${applicationId}`,
+        `/api/empresas/applicants/${applicationId}`,
       );
       setApplicantDetail(out);
     } catch (e) {

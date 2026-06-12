@@ -27,7 +27,7 @@ export function useCompanyLogin() {
 
   const getCompanyNameFromProfile = useCallback(async (token: string, email: string) => {
     try {
-      const res = await fetch("/api/company/profile", {
+      const res = await fetch("/api/empresas/profile", {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return email.split("@")[0] ?? "Empresa";
@@ -44,7 +44,7 @@ export function useCompanyLogin() {
       setIsLoading(true);
       setError(null);
       try {
-        const res = await fetch("/api/auth/login", {
+        const res = await fetch("/api/empresas/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: payload.email, password: payload.password }),
@@ -99,7 +99,7 @@ export function useCompanyLogin() {
           throw new Error("Esta cuenta no es de empresa. Inicia sesión en /login o usa un correo distinto para empresa.");
         }
         const companyName = await getCompanyNameFromProfile(token, payload.email);
-        const profileRes = await fetch("/api/company/profile", {
+        const profileRes = await fetch("/api/empresas/profile", {
           headers: { Authorization: `Bearer ${token}` },
         });
         const profileOut = profileRes.ok ? ((await profileRes.json()) as any) : null;

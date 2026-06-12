@@ -15,7 +15,7 @@ import { routes } from "@/shared/config/routes";
 /**
  * Registro de empresa (API real).
  *
- * - POST /api/auth/register/company
+ * - POST /api/empresas/register
  * - Persiste accessToken para llamadas posteriores
  * - Crea sesión local (UI) y redirige al dashboard de empresa
  */
@@ -40,7 +40,7 @@ export function useCompanySignUp() {
       setIsLoading(true);
       setError(null);
       try {
-        const res = await fetch("/api/auth/register/company", {
+        const res = await fetch("/api/empresas/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

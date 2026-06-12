@@ -41,7 +41,7 @@ export function useLoginTalent() {
 
   const loadOnboardingState = useCallback(
     async (token: string) => {
-      const res = await fetch("/api/talent/profile", {
+      const res = await fetch("/api/talento/profile", {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return { onboardingCompleted: false };
@@ -56,7 +56,7 @@ export function useLoginTalent() {
       setIsLoading(true);
       setError(null);
       try {
-        const res = await fetch("/api/auth/login", {
+        const res = await fetch("/api/talento/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: payload.email, password: payload.password }),

@@ -79,7 +79,7 @@ describe("pages smoke", () => {
 
     vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
       const url = String(input);
-      if (url.includes("/api/talent/dashboard")) {
+      if (url.includes("/api/talento/dashboard")) {
         return okJson({
           user: { email: "test@example.com" },
           profile: { fullName: "Test User", careerInterests: ["A", "B", "C"] },
@@ -87,7 +87,7 @@ describe("pages smoke", () => {
           activity: [],
         });
       }
-      if (url.includes("/api/talent/jobs")) {
+      if (url.includes("/api/talento/jobs")) {
         return okJson({
           jobs: [
             {
@@ -123,10 +123,10 @@ describe("pages smoke", () => {
 
     vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
       const url = String(input);
-      if (url.includes("/api/talent/dashboard")) {
+      if (url.includes("/api/talento/dashboard")) {
         return okJson({ profile: { careerInterests: ["A", "B", "C"] } });
       }
-      if (url.includes("/api/talent/jobs")) {
+      if (url.includes("/api/talento/jobs")) {
         return okJson({
           jobs: [
             {

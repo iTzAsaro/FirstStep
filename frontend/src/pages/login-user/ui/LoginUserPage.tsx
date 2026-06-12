@@ -121,7 +121,7 @@ export function LoginUserPage() {
         }
 
         if (accessToken) {
-          const res = await fetch("/api/auth/login/oauth", {
+          const res = await fetch("/api/talento/login/oauth", {
             method: "POST",
             headers: {
               Authorization: `Bearer ${accessToken}`,

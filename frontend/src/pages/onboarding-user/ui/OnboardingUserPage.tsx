@@ -176,7 +176,7 @@ export function OnboardingUserPage() {
 
     (async () => {
       try {
-        const res = await fetch("/api/talent/profile", {
+        const res = await fetch("/api/talento/profile", {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) return;

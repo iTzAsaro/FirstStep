@@ -100,7 +100,7 @@ export function LoginPortalPage() {
         if (!supabaseAccessToken) throw new Error("No se pudo obtener el access token de Google.");
         if (!userEmail) throw new Error("No se pudo obtener el email del usuario.");
 
-        const res = await fetch("/api/auth/login/oauth", {
+        const res = await fetch("/api/talento/login/oauth", {
           method: "POST",
           headers: {
             Authorization: `Bearer ${supabaseAccessToken}`,

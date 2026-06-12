@@ -92,19 +92,21 @@ export function OpportunitiesUserPage() {
 
   useEffect(() => {
     let alive = true;
-    const token = getToken();
-    if (!token) {
-      dispatch({ type: "load_error", payload: { message: "No hay sesión válida. Vuelve a iniciar sesión." } });
-      return;
-    }
 
     const load = async () => {
+      const token = getToken();
+      if (!token) {
+        if (!alive) return;
+        dispatch({ type: "load_error", payload: { message: "No hay sesión válida. Vuelve a iniciar sesión." } });
+        return;
+      }
+
       try {
         dispatch({ type: "load_start" });
 
         const [dashboardRes, jobsRes] = await Promise.all([
-          fetch("/api/talent/dashboard", { headers: { Authorization: `Bearer ${token}` } }),
-          fetch("/api/talent/jobs", { headers: { Authorization: `Bearer ${token}` } }),
+          fetch("/api/talento/dashboard", { headers: { Authorization: `Bearer ${token}` } }),
+          fetch("/api/talento/jobs", { headers: { Authorization: `Bearer ${token}` } }),
         ]);
 
         if (!dashboardRes.ok) {
@@ -140,8 +142,27 @@ export function OpportunitiesUserPage() {
     };
 
     void load();
+
+    const refreshOnFocus = () => {
+      if (document.visibilityState === "visible") {
+        void load();
+      }
+    };
+
+    const refreshInterval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void load();
+      }
+    }, 30000);
+
+    window.addEventListener("focus", refreshOnFocus);
+    document.addEventListener("visibilitychange", refreshOnFocus);
+
     return () => {
       alive = false;
+      window.clearInterval(refreshInterval);
+      window.removeEventListener("focus", refreshOnFocus);
+      document.removeEventListener("visibilitychange", refreshOnFocus);
     };
   }, []);
 
@@ -195,7 +216,7 @@ export function OpportunitiesUserPage() {
 
           dispatch({ type: "apply_start" });
           try {
-            const res = await fetch(`/api/talent/jobs/${jobId}/apply`, {
+            const res = await fetch(`/api/talento/jobs/${jobId}/apply`, {
               method: "POST",
               headers: {
                 Authorization: `Bearer ${token}`,
@@ -213,7 +234,7 @@ export function OpportunitiesUserPage() {
             }
             const jobsToken = getToken();
             if (!jobsToken) throw new Error("No hay sesión válida. Vuelve a iniciar sesión.");
-            const refreshRes = await fetch("/api/talent/jobs", { headers: { Authorization: `Bearer ${jobsToken}` } });
+            const refreshRes = await fetch("/api/talento/jobs", { headers: { Authorization: `Bearer ${jobsToken}` } });
             if (!refreshRes.ok) throw new Error("No se pudieron actualizar las oportunidades.");
             const refreshOut = (await refreshRes.json()) as { jobs?: JobRow[] };
             dispatch({

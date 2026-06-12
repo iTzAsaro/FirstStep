@@ -84,7 +84,7 @@ describe("DashboardCompanyPage", () => {
     localStorage.setItem("firststep.api.accessToken", "company-token");
     vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
       const url = String(input);
-      if (url.includes("/api/company/dashboard")) {
+      if (url.includes("/api/empresas/dashboard")) {
         return okJson({
           onboardingCompleted: true,
           profile: { companyName: "Acme Corp", verificationStatus: "verified" },
@@ -93,7 +93,7 @@ describe("DashboardCompanyPage", () => {
           recentApplications: [],
         });
       }
-      if (url.includes("/api/company/jobs") && (!init?.method || init.method === "GET")) {
+      if (url.includes("/api/empresas/jobs") && (!init?.method || init.method === "GET")) {
         return okJson({
           jobs: [
             {
@@ -116,8 +116,8 @@ describe("DashboardCompanyPage", () => {
           ],
         });
       }
-      if (url.includes("/api/company/applicants")) return okJson({ applicants: [] });
-      if (url.includes("/api/company/conversations")) return okJson({ conversations: [] });
+      if (url.includes("/api/empresas/applicants")) return okJson({ applicants: [] });
+      if (url.includes("/api/empresas/conversations")) return okJson({ conversations: [] });
       return errJson(404, "not mocked");
     });
 
@@ -136,7 +136,7 @@ describe("DashboardCompanyPage", () => {
     localStorage.setItem("firststep.api.accessToken", "company-token");
     vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
       const url = String(input);
-      if (url.includes("/api/company/dashboard")) {
+      if (url.includes("/api/empresas/dashboard")) {
         return okJson({
           onboardingCompleted: true,
           profile: { companyName: "Acme Corp", verificationStatus: "verified" },
@@ -145,14 +145,14 @@ describe("DashboardCompanyPage", () => {
           recentApplications: [],
         });
       }
-      if (url.includes("/api/company/jobs") && (!init?.method || init.method === "GET")) {
+      if (url.includes("/api/empresas/jobs") && (!init?.method || init.method === "GET")) {
         return okJson({ jobs: [] });
       }
-      if (url.endsWith("/api/company/jobs") && init?.method === "POST") {
+      if (url.endsWith("/api/empresas/jobs") && init?.method === "POST") {
         return okJson({ job: { id: 1 } }, 201);
       }
-      if (url.includes("/api/company/applicants")) return okJson({ applicants: [] });
-      if (url.includes("/api/company/conversations")) return okJson({ conversations: [] });
+      if (url.includes("/api/empresas/applicants")) return okJson({ applicants: [] });
+      if (url.includes("/api/empresas/conversations")) return okJson({ conversations: [] });
       return errJson(404, "not mocked");
     });
 

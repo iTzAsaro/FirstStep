@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { ChatPage } from "@/pages/chat";
+import { CompaniesUserPage } from "@/pages/companies-user";
+import { CompanyPublicPage } from "@/pages/company-public";
 import { CvBuilderPage } from "@/pages/cv-builder";
 import { DashboardCompanyPage } from "@/pages/dashboard-company";
 import { DashboardUserPage } from "@/pages/dashboard-user";
@@ -19,6 +21,8 @@ import { SignUpTalentPage } from "@/pages/signup-talent";
 describe("page index exports", () => {
   it("re-exports every page component", () => {
     expect(ChatPage).toBeTypeOf("function");
+    expect(CompaniesUserPage).toBeTypeOf("function");
+    expect(CompanyPublicPage).toBeTypeOf("function");
     expect(CvBuilderPage).toBeTypeOf("function");
     expect(DashboardCompanyPage).toBeTypeOf("function");
     expect(DashboardUserPage).toBeTypeOf("function");

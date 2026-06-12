@@ -14,6 +14,68 @@ const COMPANY_SIZES = [
   { value: "500+", label: "500+ personas" },
 ];
 
+function normalizeRut(raw: string) {
+  return raw.replace(/\./g, "").replace(/\s+/g, "").toUpperCase();
+}
+
+function isRutFormattedValid(raw: string) {
+  return /^\d{1,2}\.\d{3}\.\d{3}-[\dKk]$/.test(raw.trim());
+}
+
+function computeRutDv(bodyDigits: string) {
+  let sum = 0;
+  let multiplier = 2;
+  for (let i = bodyDigits.length - 1; i >= 0; i--) {
+    sum += Number(bodyDigits[i]) * multiplier;
+    multiplier = multiplier === 7 ? 2 : multiplier + 1;
+  }
+  const mod = 11 - (sum % 11);
+  if (mod === 11) return "0";
+  if (mod === 10) return "K";
+  return String(mod);
+}
+
+function isRutChecksumValid(normalizedRut: string) {
+  const match = normalizedRut.match(/^(\d{7,8})-([\dK])$/);
+  if (!match) return false;
+  const expected = computeRutDv(match[1]);
+  return match[2] === expected;
+}
+
+function formatRut(raw: string) {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  if (isRutFormattedValid(trimmed)) return trimmed.toUpperCase();
+  const normalized = normalizeRut(trimmed);
+  const match = normalized.match(/^(\d{7,8})-([\dK])$/);
+  if (!match) return trimmed;
+  const body = match[1];
+  const dv = match[2];
+  const parts: string[] = [];
+  let rest = body;
+  while (rest.length > 3) {
+    parts.unshift(rest.slice(-3));
+    rest = rest.slice(0, -3);
+  }
+  parts.unshift(rest);
+  return `${parts.join(".")}-${dv}`;
+}
+
+function formatRutInput(raw: string) {
+  const cleaned = raw.replace(/[^0-9kK]/g, "").toUpperCase().slice(0, 9);
+  if (!cleaned) return "";
+  if (cleaned.length === 1) return cleaned;
+  const dv = cleaned.slice(-1);
+  let body = cleaned.slice(0, -1);
+  const parts: string[] = [];
+  while (body.length > 3) {
+    parts.unshift(body.slice(-3));
+    body = body.slice(0, -3);
+  }
+  if (body) parts.unshift(body);
+  return `${parts.join(".")}-${dv}`;
+}
+
 export function CompanyOnboardingPage() {
   const session = useSession();
   const navigate = useNavigate();
@@ -51,7 +113,7 @@ export function CompanyOnboardingPage() {
 
     (async () => {
       try {
-        const res = await fetch("/api/company/profile", {
+        const res = await fetch("/api/empresas/profile", {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error("No se pudo cargar el onboarding empresarial.");
@@ -64,11 +126,11 @@ export function CompanyOnboardingPage() {
         }
         setCompanyName(typeof profile.companyName === "string" ? profile.companyName : "");
         setLegalName(typeof profile.legalName === "string" ? profile.legalName : "");
-        setTaxId(typeof profile.taxId === "string" ? profile.taxId : "");
-        setValidatedRut(typeof profile.taxId === "string" ? profile.taxId : "");
+        setTaxId(typeof profile.taxId === "string" ? formatRut(profile.taxId) : "");
+        setValidatedRut(typeof profile.taxId === "string" ? normalizeRut(profile.taxId) : "");
         if (typeof profile.taxId === "string" && profile.taxId) {
           setRutStatus("valid");
-          setRutMessage("RUT previamente validado.");
+          setRutMessage("RUT verificado.");
         }
         setCompanySize(typeof profile.companySize === "string" ? profile.companySize : "");
         setIndustry(typeof profile.industry === "string" ? profile.industry : "");
@@ -82,22 +144,22 @@ export function CompanyOnboardingPage() {
           const raw = localStorage.getItem("firststep.company.onboardingDraft.v1");
           if (raw) {
             const draft = JSON.parse(raw) as any;
-            if (typeof draft?.companyName === "string") setCompanyName(draft.companyName);
-            if (typeof draft?.legalName === "string") setLegalName(draft.legalName);
-            if (typeof draft?.taxId === "string") setTaxId(draft.taxId);
-            if (typeof draft?.validatedRut === "string") setValidatedRut(draft.validatedRut);
+            if (typeof draft?.companyName === "string" && draft.companyName.trim()) setCompanyName(draft.companyName);
+            if (typeof draft?.legalName === "string" && draft.legalName.trim()) setLegalName(draft.legalName);
+            if (typeof draft?.taxId === "string" && draft.taxId.trim()) setTaxId(formatRut(draft.taxId));
+            if (typeof draft?.validatedRut === "string" && String(draft.validatedRut).trim()) setValidatedRut(normalizeRut(draft.validatedRut));
             if (draft?.rutStatus === "valid" || draft?.rutStatus === "invalid" || draft?.rutStatus === "checking" || draft?.rutStatus === "idle") {
               setRutStatus(draft.rutStatus);
             }
-            if (typeof draft?.rutMessage === "string") setRutMessage(draft.rutMessage);
-            if (typeof draft?.companySize === "string") setCompanySize(draft.companySize);
-            if (typeof draft?.industry === "string") setIndustry(draft.industry);
-            if (typeof draft?.activitySector === "string") setActivitySector(draft.activitySector);
-            if (typeof draft?.location === "string") setLocation(draft.location);
-            if (typeof draft?.address === "string") setAddress(draft.address);
-            if (typeof draft?.contactEmail === "string") setContactEmail(draft.contactEmail);
-            if (typeof draft?.website === "string") setWebsite(draft.website);
-            if (typeof draft?.description === "string") setDescription(draft.description);
+            if (typeof draft?.rutMessage === "string" && draft.rutMessage.trim()) setRutMessage(draft.rutMessage);
+            if (typeof draft?.companySize === "string" && draft.companySize.trim()) setCompanySize(draft.companySize);
+            if (typeof draft?.industry === "string" && draft.industry.trim()) setIndustry(draft.industry);
+            if (typeof draft?.activitySector === "string" && draft.activitySector.trim()) setActivitySector(draft.activitySector);
+            if (typeof draft?.location === "string" && draft.location.trim()) setLocation(draft.location);
+            if (typeof draft?.address === "string" && draft.address.trim()) setAddress(draft.address);
+            if (typeof draft?.contactEmail === "string" && draft.contactEmail.trim()) setContactEmail(draft.contactEmail);
+            if (typeof draft?.website === "string" && draft.website.trim()) setWebsite(draft.website);
+            if (typeof draft?.description === "string" && draft.description.trim()) setDescription(draft.description);
             if (typeof draft?.verificationConfirmed === "boolean") setVerificationConfirmed(draft.verificationConfirmed);
             if (typeof draft?.acceptedCompanyTerms === "boolean") setAcceptedCompanyTerms(draft.acceptedCompanyTerms);
             if (draft?.step && [1, 2, 3, 4].includes(draft.step)) setStep(draft.step);
@@ -116,9 +178,8 @@ export function CompanyOnboardingPage() {
     if (!companyName.trim()) next.companyName = "El nombre comercial es obligatorio.";
     if (!legalName.trim()) next.legalName = "La razón social es obligatoria.";
     if (!taxId.trim()) next.taxId = "El RUT es obligatorio.";
-    if (taxId.trim() && !/^\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]$/.test(taxId.trim()) && !/^\d{7,8}-[\dkK]$/.test(taxId.trim())) {
-      next.taxId = "Ingresa un RUT válido, por ejemplo 12.345.678-5.";
-    }
+    if (taxId.trim() && !isRutFormattedValid(taxId.trim())) next.taxId = "Ingresa un RUT válido, por ejemplo 12.345.678-5.";
+    if (!next.taxId && taxId.trim() && !isRutChecksumValid(normalizeRut(taxId.trim()))) next.taxId = "El RUT no es válido.";
     if (!companySize.trim()) next.companySize = "Selecciona el tamaño de plantilla.";
     if (!industry.trim()) next.industry = "La industria es obligatoria.";
     if (!activitySector.trim()) next.activitySector = "El sector de actividad es obligatorio.";
@@ -216,42 +277,29 @@ export function CompanyOnboardingPage() {
       setValidatedRut("");
       return;
     }
+    if (!isRutFormattedValid(taxId.trim())) {
+      setRutStatus("idle");
+      setValidatedRut("");
+      setRutMessage("");
+      return;
+    }
+    if (!isRutChecksumValid(normalizedRut)) {
+      setRutStatus("invalid");
+      setValidatedRut("");
+      setRutMessage("El RUT no es válido.");
+      return;
+    }
+    if (normalizedRut !== validatedRut || rutStatus !== "valid") {
+      setRutStatus("valid");
+      setValidatedRut(normalizedRut);
+      setRutMessage("RUT verificado.");
+      return;
+    }
     if (normalizedRut !== validatedRut) {
       setRutStatus("idle");
       setRutMessage("");
     }
-  }, [taxId, validatedRut]);
-
-  async function validateRut() {
-    const rut = taxId.trim();
-    if (!rut || formErrors.taxId) return;
-    setRutStatus("checking");
-    setRutMessage("Validando RUT con SII...");
-    try {
-      const res = await fetch("/api/company/validate-rut", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ rut }),
-      });
-      const out = (await res.json()) as any;
-      if (!res.ok) {
-        const message =
-          typeof out?.error?.message === "string" && out.error.message ? out.error.message : "No se pudo validar el RUT.";
-        throw new Error(message);
-      }
-      const normalizedRut = typeof out?.rut === "string" ? out.rut : rut.replace(/\./g, "").replace(/\s+/g, "").toUpperCase();
-      setValidatedRut(normalizedRut);
-      setRutStatus("valid");
-      setRutMessage("RUT validado correctamente con SII.");
-    } catch (e) {
-      setValidatedRut("");
-      setRutStatus("invalid");
-      setRutMessage(e instanceof Error ? e.message : "No se pudo validar el RUT.");
-    }
-  }
+  }, [rutStatus, taxId, validatedRut]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -260,7 +308,7 @@ export function CompanyOnboardingPage() {
     setIsSaving(true);
     setError(null);
     try {
-      const res = await fetch("/api/company/onboarding", {
+      const res = await fetch("/api/empresas/onboarding", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -446,19 +494,10 @@ export function CompanyOnboardingPage() {
                               <Input
                                 id="taxId"
                                 value={taxId}
-                                onChange={(e) => setTaxId(e.target.value)}
-                                onBlur={() => void validateRut()}
+                                onChange={(e) => setTaxId(formatRutInput(e.target.value))}
                                 placeholder="12.345.678-5"
                               />
                             </div>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              disabled={Boolean(formErrors.taxId) || rutStatus === "checking" || !taxId.trim()}
-                              onClick={() => void validateRut()}
-                            >
-                              {rutStatus === "checking" ? "Validando..." : "Validar RUT"}
-                            </Button>
                           </div>
                           {formErrors.taxId ? <p className="mt-2 text-xs text-red-700">{formErrors.taxId}</p> : null}
                           {!formErrors.taxId && rutMessage ? (

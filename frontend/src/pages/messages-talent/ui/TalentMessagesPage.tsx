@@ -104,13 +104,13 @@ export function TalentMessagesPage() {
   }
 
   async function loadConversations() {
-    const out = await fetchJson<{ conversations: ConversationRow[] }>("/api/talent/conversations");
+    const out = await fetchJson<{ conversations: ConversationRow[] }>("/api/talento/conversations");
     setConversations(out.conversations ?? []);
     if (!activeConversationId && out.conversations?.[0]) setActiveConversationId(out.conversations[0].id);
   }
 
   async function loadMessages(conversationId: number) {
-    const out = await fetchJson<{ messages: MessageRow[] }>(`/api/talent/conversations/${conversationId}/messages`);
+    const out = await fetchJson<{ messages: MessageRow[] }>(`/api/talento/conversations/${conversationId}/messages`);
     setMessages(out.messages ?? []);
   }
 
@@ -154,7 +154,7 @@ export function TalentMessagesPage() {
         finalAttachmentUrl = uploaded.url;
         finalAttachmentName = finalAttachmentName || uploaded.file.fileName;
       }
-      await fetchJson(`/api/talent/conversations/${activeConversationId}/messages`, {
+      await fetchJson(`/api/talento/conversations/${activeConversationId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

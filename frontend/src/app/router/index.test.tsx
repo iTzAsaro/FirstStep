@@ -10,6 +10,8 @@ vi.mock("@/app/router/ProtectedRoute", () => ({
 }));
 
 vi.mock("@/pages/chat", () => ({ ChatPage: () => <div>ChatPage</div> }));
+vi.mock("@/pages/companies-user", () => ({ CompaniesUserPage: () => <div>CompaniesUserPage</div> }));
+vi.mock("@/pages/company-public", () => ({ CompanyPublicPage: () => <div>CompanyPublicPage</div> }));
 vi.mock("@/pages/dashboard-company", () => ({ DashboardCompanyPage: () => <div>DashboardCompanyPage</div> }));
 vi.mock("@/pages/dashboard-user", () => ({ DashboardUserPage: () => <div>DashboardUserPage</div> }));
 vi.mock("@/pages/cv-builder", () => ({ CvBuilderPage: () => <div>CvBuilderPage</div> }));
@@ -42,6 +44,8 @@ describe("AppRouter", () => {
     [routes.onboarding, "OnboardingUserPage"],
     [routes.dashboard, "DashboardUserPage"],
     [routes.opportunities, "OpportunitiesUserPage"],
+    [routes.companies, "CompaniesUserPage"],
+    ["/empresas/1", "CompanyPublicPage"],
     [routes.cvBuilder, "CvBuilderPage"],
     [routes.chat, "ChatPage"],
     [routes.messages, "TalentMessagesPage"],
