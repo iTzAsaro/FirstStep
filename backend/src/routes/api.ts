@@ -19,7 +19,8 @@ import { createTalentRouter } from "./talent";
 
 /**
  * Crea el router de la API y monta módulos:
- * - /auth, /talent, /company, /cv, /ai
+ * - /auth, /talento, /empresas, /cv, /ai
+ * - Mantiene aliases legacy /talent y /company por compatibilidad
  */
 export function createApiRouter(ctx: AppContext) {
   const router = Router();
@@ -27,7 +28,10 @@ export function createApiRouter(ctx: AppContext) {
   router.use(createFilesRouter(ctx));
   router.use("/auth", createAuthRouter(ctx));
   router.use("/catalog", createCatalogRouter(ctx));
+  router.use("/talento", createTalentRouter(ctx));
   router.use("/talent", createTalentRouter(ctx));
+  router.use("/empresas", createCompanyRouter(ctx));
+  router.use("/empresa", createCompanyRouter(ctx));
   router.use("/company", createCompanyRouter(ctx));
   router.use("/cv", createCvRouter(ctx));
   router.use("/ai", createAiRouter(ctx));

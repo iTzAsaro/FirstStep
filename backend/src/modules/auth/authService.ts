@@ -136,8 +136,14 @@ export class AuthService {
         }
       } else {
         const currentProfile = await this.companyProfiles.get(user.id);
+        const oauthCompanyPrefill = buildCompanyOAuthPrefill(claims, email, oauthDisplayName);
         if (!currentProfile) {
-          await this.companyProfiles.upsert(user.id, { companyName: oauthDisplayName ?? email.split("@")[0] });
+          await this.companyProfiles.upsert(user.id, oauthCompanyPrefill);
+        } else {
+          const missingFieldsPrefill = pickMissingCompanyFields(currentProfile, oauthCompanyPrefill);
+          if (Object.keys(missingFieldsPrefill).length > 0) {
+            await this.companyProfiles.upsert(user.id, missingFieldsPrefill);
+          }
         }
       }
     }
@@ -165,7 +171,7 @@ export class AuthService {
         if (params.role === "talento") {
           await this.talentProfiles.upsert(user.id, { fullName: oauthDisplayName ?? email.split("@")[0] });
         } else {
-          await this.companyProfiles.upsert(user.id, { companyName: email.split("@")[0] });
+          await this.companyProfiles.upsert(user.id, buildCompanyOAuthPrefill(claims, email, oauthDisplayName));
         }
       } catch (error) {
         throw withStage("create-user-from-google", error);
@@ -194,6 +200,106 @@ function readOAuthDisplayName(claims: any) {
     if (normalized) return normalized;
   }
   return null;
+}
+
+function normalizeCompanyField(value: unknown) {
+  if (typeof value !== "string") return "";
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function titleCaseWords(value: string) {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function isGenericEmailDomain(domain: string) {
+  return new Set([
+    "gmail.com",
+    "googlemail.com",
+    "outlook.com",
+    "hotmail.com",
+    "live.com",
+    "msn.com",
+    "yahoo.com",
+    "yahoo.es",
+    "icloud.com",
+    "me.com",
+    "proton.me",
+    "protonmail.com",
+    "aol.com",
+  ]).has(domain);
+}
+
+function deriveCompanyNameFromDomain(domain: string) {
+  const host = domain.toLowerCase().replace(/^www\./, "");
+  const base = host.split(".")[0] ?? "";
+  const cleaned = base.replace(/[^a-z0-9]+/gi, " ").trim();
+  if (!cleaned) return "";
+  return titleCaseWords(cleaned);
+}
+
+function readOAuthCompanyName(claims: any, emailDomain: string, oauthDisplayName: string | null) {
+  const metadataCandidates = [
+    claims?.user_metadata?.company,
+    claims?.user_metadata?.company_name,
+    claims?.user_metadata?.organization,
+    claims?.user_metadata?.organization_name,
+  ];
+  for (const candidate of metadataCandidates) {
+    const normalized = normalizeCompanyField(candidate);
+    if (normalized) return normalized;
+  }
+  const domainName = isGenericEmailDomain(emailDomain) ? "" : deriveCompanyNameFromDomain(emailDomain);
+  if (domainName) return domainName;
+  if (oauthDisplayName && oauthDisplayName.includes("@")) return "";
+  return oauthDisplayName ?? "";
+}
+
+function buildCompanyOAuthPrefill(claims: any, email: string, oauthDisplayName: string | null) {
+  const emailDomain = email.includes("@") ? email.split("@")[1]!.toLowerCase() : "";
+  const companyName = normalizeCompanyField(readOAuthCompanyName(claims, emailDomain, oauthDisplayName));
+  const hostedDomain = normalizeCompanyField(claims?.hd);
+  const safeDomain = hostedDomain || emailDomain;
+  const website = safeDomain && !isGenericEmailDomain(safeDomain) ? `https://${safeDomain}` : null;
+
+  return {
+    companyName: companyName || email.split("@")[0],
+    legalName: companyName || null,
+    contactEmail: email,
+    website,
+  };
+}
+
+function pickMissingCompanyFields(
+  currentProfile: {
+    companyName: string | null;
+    legalName: string | null;
+    contactEmail: string | null;
+    website: string | null;
+  } | null,
+  prefill: {
+    companyName: string;
+    legalName: string | null;
+    contactEmail: string;
+    website: string | null;
+  },
+) {
+  const next: {
+    companyName?: string;
+    legalName?: string | null;
+    contactEmail?: string;
+    website?: string | null;
+  } = {};
+
+  if (!currentProfile?.companyName?.trim() && prefill.companyName) next.companyName = prefill.companyName;
+  if (!currentProfile?.legalName?.trim() && prefill.legalName) next.legalName = prefill.legalName;
+  if (!currentProfile?.contactEmail?.trim() && prefill.contactEmail) next.contactEmail = prefill.contactEmail;
+  if (!currentProfile?.website?.trim() && prefill.website) next.website = prefill.website;
+
+  return next;
 }
 
 type Jwks = { keys?: any[] };

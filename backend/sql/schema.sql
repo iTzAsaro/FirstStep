@@ -35,6 +35,7 @@ CREATE TABLE talent_profiles (
   headline VARCHAR(200),
   location VARCHAR(200),
   phone VARCHAR(50),
+  company_user_id BIGINT,
   university VARCHAR(200),
   degree VARCHAR(200),
   grad_year INT CHECK (grad_year IS NULL OR (grad_year >= 1900 AND grad_year <= 2100)),
@@ -46,8 +47,12 @@ CREATE TABLE talent_profiles (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT fk_talent_profiles_user
-    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+  CONSTRAINT fk_talent_profiles_company
+    FOREIGN KEY (company_user_id) REFERENCES users (id) ON DELETE SET NULL
 );
+
+CREATE INDEX idx_talent_profiles_company_user_id ON talent_profiles (company_user_id);
 
 CREATE TABLE company_profiles (
   user_id BIGINT PRIMARY KEY,

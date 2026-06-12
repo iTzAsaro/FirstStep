@@ -8,12 +8,15 @@
 import { Router } from "express";
 
 import type { AppContext } from "../app";
+import { AuthService } from "../modules/auth/authService";
+import { UserRepository } from "../modules/auth/userRepository";
+import { CompanyProfileRepository } from "../modules/company/companyProfileRepository";
 import { JobRepository } from "../modules/jobs/jobRepository";
 import { TalentProfileRepository } from "../modules/talent/talentProfileRepository";
 import { authenticate } from "../shared/http/middleware/authenticate";
 import { requireRole } from "../shared/http/middleware/requireRole";
 import { Errors } from "../shared/http/middleware/errorHandler";
-import { asNumberId, optionalString, requiredString } from "../shared/validation/validators";
+import { asNumberId, email, optionalString, password, requiredString } from "../shared/validation/validators";
 
 /**
  * Rutas de talento:
@@ -26,6 +29,77 @@ export function createTalentRouter(ctx: AppContext) {
   const router = Router();
   const repo = new TalentProfileRepository(ctx.db);
   const jobs = new JobRepository(ctx.db);
+  const auth = new AuthService(
+    ctx.env,
+    new UserRepository(ctx.db),
+    repo,
+    new CompanyProfileRepository(ctx.db),
+  );
+
+  function isOnboardingComplete(profile: any) {
+    const fullName = typeof profile?.fullName === "string" ? profile.fullName.trim() : "";
+    const city = typeof profile?.location === "string" ? profile.location.trim() : "";
+    const university = typeof profile?.university === "string" ? profile.university.trim() : "";
+    const degree = typeof profile?.degree === "string" ? profile.degree.trim() : "";
+    const gradYear = typeof profile?.gradYear === "number" ? profile.gradYear : null;
+    const careers = Array.isArray(profile?.careerInterests) ? profile.careerInterests : [];
+    return Boolean(fullName && city && university && degree && gradYear && careers.length >= 3);
+  }
+
+  router.post("/register", async (req, res, next) => {
+    try {
+      const body = req.body ?? {};
+      const userEmail = email(body.email, "email");
+      const userPassword = password(body.password, "password");
+      const displayName = optionalString(body.fullName, "fullName") || userEmail.split("@")[0];
+      const acceptedTerms = body.acceptedTerms === true;
+      const acceptedPrivacy = body.acceptedPrivacy === true;
+      if (!acceptedTerms || !acceptedPrivacy) {
+        throw Errors.badRequest("Debes aceptar los Términos y la Política de Privacidad.");
+      }
+      const now = new Date().toISOString();
+      const out = await auth.register({
+        role: "talento",
+        email: userEmail,
+        password: userPassword,
+        displayName,
+        acceptedTermsAt: now,
+        acceptedPrivacyAt: now,
+      });
+      return res.status(201).json(out);
+    } catch (e) {
+      return next(e);
+    }
+  });
+
+  router.post("/login", async (req, res, next) => {
+    try {
+      const body = req.body ?? {};
+      const userEmail = email(body.email, "email");
+      const userPassword = requiredString(body.password, "password");
+      const out = await auth.login({ email: userEmail, password: userPassword });
+      if (out.user.role !== "talento") {
+        throw Errors.unauthorized("Esta cuenta no corresponde al acceso de talento.");
+      }
+      const profile = await repo.get(out.user.id);
+      return res.json({ ...out, onboardingCompleted: isOnboardingComplete(profile) });
+    } catch (e) {
+      return next(e);
+    }
+  });
+
+  router.post("/login/oauth", async (req, res, next) => {
+    try {
+      const authHeader = req.headers.authorization ?? "";
+      const token = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length).trim() : "";
+      if (!token) throw Errors.unauthorized();
+      const out = await auth.loginWithGoogle({ supabaseAccessToken: token, role: "talento" });
+      const profile = await repo.get(out.user.id);
+      return res.json({ ...out, onboardingCompleted: isOnboardingComplete(profile) });
+    } catch (e) {
+      return next(e);
+    }
+  });
 
   router.use(authenticate(ctx.env), requireRole("talento"));
 

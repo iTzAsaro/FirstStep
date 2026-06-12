@@ -132,4 +132,83 @@ export class CompanyProfileRepository {
         profile.acceptedCompanyTermsAt,
     );
   }
+
+  async getPublic(userId: number) {
+    const row = await this.db.queryOne<any>(
+      `SELECT u.id::text as id,
+              cp.company_name as "companyName",
+              cp.industry,
+              cp.activity_sector as "activitySector",
+              cp.location,
+              cp.website,
+              cp.contact_email as "contactEmail",
+              cp.description,
+              cp.verification_status as "verificationStatus",
+              cp.created_at as "createdAt",
+              cp.updated_at as "updatedAt"
+       FROM users u
+       JOIN company_profiles cp ON cp.user_id = u.id
+       WHERE u.id = :userId AND u.role = 'empresa'`,
+      { userId },
+    );
+    return row ?? null;
+  }
+
+  async listPublic(params: {
+    query?: string | null;
+    industry?: string | null;
+    location?: string | null;
+    companySize?: string | null;
+    verified?: boolean | null;
+    page: number;
+    pageSize: number;
+  }) {
+    const query = params.query?.trim() ? `%${params.query.trim().toLowerCase()}%` : null;
+    const industry = params.industry?.trim() ? `%${params.industry.trim().toLowerCase()}%` : null;
+    const location = params.location?.trim() ? `%${params.location.trim().toLowerCase()}%` : null;
+    const companySize = params.companySize?.trim() ? params.companySize.trim() : null;
+    const verified = params.verified === null || params.verified === undefined ? null : params.verified;
+
+    const where = `
+      WHERE u.role = 'empresa'
+        AND (:query IS NULL OR LOWER(cp.company_name) LIKE :query OR LOWER(cp.legal_name) LIKE :query)
+        AND (:industry IS NULL OR LOWER(cp.industry) LIKE :industry OR LOWER(cp.activity_sector) LIKE :industry)
+        AND (:location IS NULL OR LOWER(cp.location) LIKE :location)
+        AND (:companySize IS NULL OR cp.company_size = :companySize)
+        AND (:verified IS NULL OR (cp.verification_status = 'verified') = :verified)
+    `;
+
+    const countRow = await this.db.queryOne<any>(
+      `SELECT COUNT(*)::int as count
+       FROM users u
+       JOIN company_profiles cp ON cp.user_id = u.id
+       ${where}`,
+      { query, industry, location, companySize, verified },
+    );
+    const total = Number(countRow?.count ?? 0);
+    const offset = (params.page - 1) * params.pageSize;
+
+    const items = await this.db.queryMany<any>(
+      `SELECT u.id::text as id,
+              cp.company_name as "companyName",
+              cp.industry,
+              cp.activity_sector as "activitySector",
+              cp.location,
+              cp.company_size as "companySize",
+              cp.website,
+              cp.contact_email as "contactEmail",
+              cp.description,
+              cp.verification_status as "verificationStatus",
+              cp.created_at as "createdAt",
+              cp.updated_at as "updatedAt"
+       FROM users u
+       JOIN company_profiles cp ON cp.user_id = u.id
+       ${where}
+       ORDER BY cp.updated_at DESC
+       LIMIT :limit OFFSET :offset`,
+      { query, industry, location, companySize, verified, limit: params.pageSize, offset },
+    );
+
+    return { total, items };
+  }
 }

@@ -179,5 +179,17 @@ export function createAuthRouter(ctx: AppContext) {
     }
   });
 
+  router.post("/dev/purge-users", async (_req, res, next) => {
+    try {
+      if (ctx.env.nodeEnv !== "development") {
+        throw Errors.notFound();
+      }
+      await ctx.db.execute(`TRUNCATE TABLE users RESTART IDENTITY CASCADE`, {});
+      return res.json({ ok: true });
+    } catch (e) {
+      return next(e);
+    }
+  });
+
   return router;
 }

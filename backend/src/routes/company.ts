@@ -8,12 +8,15 @@
 import { Router } from "express";
 
 import type { AppContext } from "../app";
+import { AuthService } from "../modules/auth/authService";
+import { UserRepository } from "../modules/auth/userRepository";
 import { CompanyProfileRepository } from "../modules/company/companyProfileRepository";
 import { JobRepository } from "../modules/jobs/jobRepository";
+import { TalentProfileRepository } from "../modules/talent/talentProfileRepository";
 import { authenticate } from "../shared/http/middleware/authenticate";
 import { requireRole } from "../shared/http/middleware/requireRole";
 import { Errors } from "../shared/http/middleware/errorHandler";
-import { asNumberId, email, oneOf, optionalString, requiredString } from "../shared/validation/validators";
+import { asNumberId, email, oneOf, optionalString, password, requiredString } from "../shared/validation/validators";
 
 /**
  * Rutas de empresa:
@@ -26,54 +29,157 @@ export function createCompanyRouter(ctx: AppContext) {
   const router = Router();
   const repo = new CompanyProfileRepository(ctx.db);
   const jobs = new JobRepository(ctx.db);
-  const siiEndpoint = "https://api.baseapi.cl/api/v1/sii/contribuyente/situacion-tributaria";
-
-  router.use(authenticate(ctx.env), requireRole("empresa"));
+  const talentProfiles = new TalentProfileRepository(ctx.db);
+  const auth = new AuthService(
+    ctx.env,
+    new UserRepository(ctx.db),
+    talentProfiles,
+    repo,
+  );
 
   function normalizeRut(raw: string) {
     return raw.replace(/\./g, "").replace(/\s+/g, "").toUpperCase();
   }
 
-  function isRutFormatValid(raw: string) {
-    const normalized = normalizeRut(raw);
-    return /^\d{7,8}-[\dK]$/.test(normalized);
+  function isRutFormattedValid(raw: string) {
+    const trimmed = raw.trim();
+    return /^\d{1,2}\.\d{3}\.\d{3}-[\dKk]$/.test(trimmed);
   }
 
-  async function validateRutWithSii(rawRut: string) {
-    const rut = normalizeRut(rawRut);
-    if (!isRutFormatValid(rut)) {
+  function computeRutDv(bodyDigits: string) {
+    let sum = 0;
+    let multiplier = 2;
+    for (let i = bodyDigits.length - 1; i >= 0; i--) {
+      sum += Number(bodyDigits[i]) * multiplier;
+      multiplier = multiplier === 7 ? 2 : multiplier + 1;
+    }
+    const mod = 11 - (sum % 11);
+    if (mod === 11) return "0";
+    if (mod === 10) return "K";
+    return String(mod);
+  }
+
+  function validateRutOrThrow(rawRut: string) {
+    if (!isRutFormattedValid(rawRut)) {
       throw Errors.badRequest("El RUT debe tener formato válido, por ejemplo 12.345.678-5.");
     }
-    if (!ctx.env.apiBaseSiiKey) {
-      throw new Error("La validación tributaria no está configurada en el servidor.");
+    const rut = normalizeRut(rawRut);
+    const match = rut.match(/^(\d{7,8})-([\dK])$/);
+    if (!match) {
+      throw Errors.badRequest("El RUT debe tener formato válido, por ejemplo 12.345.678-5.");
     }
-
-    const res = await fetch(siiEndpoint, {
-      method: "POST",
-      headers: {
-        "X-API-Key": ctx.env.apiBaseSiiKey,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ rut }),
-    });
-
-    let data: any = null;
-    try {
-      data = await res.json();
-    } catch {}
-
-    if (!res.ok) {
-      const detail =
-        typeof data?.message === "string" && data.message
-          ? data.message
-          : typeof data?.error === "string" && data.error
-            ? data.error
-            : `No se pudo validar el RUT en SII (${res.status}).`;
-      throw Errors.badRequest(detail);
+    const bodyDigits = match[1];
+    const dv = match[2];
+    const expected = computeRutDv(bodyDigits);
+    if (dv !== expected) {
+      throw Errors.badRequest("El RUT no es válido.");
     }
-
-    return { rut, data };
+    return rut;
   }
+
+  router.post("/register", async (req, res, next) => {
+    try {
+      const body = req.body ?? {};
+      const userEmail = email(body.email, "email");
+      const userPassword = password(body.password, "password");
+      const displayName = optionalString(body.companyName, "companyName") || userEmail.split("@")[0];
+      const companySize = optionalString(body.companySize, "companySize");
+      const acceptedTerms = body.acceptedTerms === true;
+      const acceptedPrivacy = body.acceptedPrivacy === true;
+      if (!acceptedTerms || !acceptedPrivacy) {
+        throw Errors.badRequest("Debes aceptar los Términos y la Política de Privacidad.");
+      }
+      const now = new Date().toISOString();
+      const out = await auth.register({
+        role: "empresa",
+        email: userEmail,
+        password: userPassword,
+        displayName,
+        acceptedTermsAt: now,
+        acceptedPrivacyAt: now,
+      });
+      await repo.upsert(Number(out.user.id), { companyName: displayName, companySize });
+      return res.status(201).json({ ...out, onboardingCompleted: false });
+    } catch (e) {
+      return next(e);
+    }
+  });
+
+  router.post("/login", async (req, res, next) => {
+    try {
+      const body = req.body ?? {};
+      const userEmail = email(body.email, "email");
+      const userPassword = requiredString(body.password, "password");
+      const out = await auth.login({ email: userEmail, password: userPassword });
+      if (out.user.role !== "empresa") {
+        throw Errors.unauthorized("Esta cuenta no corresponde al acceso empresarial.");
+      }
+      const profile = await repo.get(out.user.id);
+      return res.json({ ...out, onboardingCompleted: repo.isOnboardingComplete(profile) });
+    } catch (e) {
+      return next(e);
+    }
+  });
+
+  router.post("/login/oauth", async (req, res, next) => {
+    try {
+      const authHeader = req.headers.authorization ?? "";
+      const token = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length).trim() : "";
+      if (!token) throw Errors.unauthorized();
+      const out = await auth.loginWithGoogle({ supabaseAccessToken: token, role: "empresa" });
+      const profile = await repo.get(out.user.id);
+      return res.json({ ...out, onboardingCompleted: repo.isOnboardingComplete(profile) });
+    } catch (e) {
+      return next(e);
+    }
+  });
+
+  router.get("/directory", authenticate(ctx.env), requireRole("talento"), async (req, res, next) => {
+    try {
+      if (!req.auth) throw Errors.unauthorized();
+      const query = optionalString(req.query.query ?? null, "query");
+      const industry = optionalString(req.query.industry ?? null, "industry");
+      const location = optionalString(req.query.location ?? null, "location");
+      const companySize = optionalString(req.query.companySize ?? null, "companySize");
+      const verifiedRaw = optionalString(req.query.verified ?? null, "verified");
+      const pageRaw = optionalString(req.query.page ?? null, "page");
+      const pageSizeRaw = optionalString(req.query.pageSize ?? null, "pageSize");
+
+      const page = pageRaw ? Number(pageRaw) : 1;
+      const pageSize = pageSizeRaw ? Number(pageSizeRaw) : 12;
+      if (!Number.isFinite(page) || !Number.isInteger(page) || page < 1) throw Errors.badRequest("Parámetro 'page' inválido.");
+      if (!Number.isFinite(pageSize) || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 50) {
+        throw Errors.badRequest("Parámetro 'pageSize' inválido.");
+      }
+      const verified =
+        verifiedRaw === null || verifiedRaw === undefined || verifiedRaw === ""
+          ? null
+          : verifiedRaw === "true" || verifiedRaw === "1"
+            ? true
+            : verifiedRaw === "false" || verifiedRaw === "0"
+              ? false
+              : null;
+
+      const out = await repo.listPublic({ query, industry, location, companySize, verified, page, pageSize });
+      return res.json({ items: out.items, total: out.total, page, pageSize });
+    } catch (e) {
+      return next(e);
+    }
+  });
+
+  router.get("/directory/:id", authenticate(ctx.env), requireRole("talento"), async (req, res, next) => {
+    try {
+      if (!req.auth) throw Errors.unauthorized();
+      const companyUserId = asNumberId(req.params.id, "id");
+      const company = await repo.getPublic(companyUserId);
+      if (!company) throw Errors.notFound("Empresa no encontrada.");
+      return res.json({ company });
+    } catch (e) {
+      return next(e);
+    }
+  });
+
+  router.use(authenticate(ctx.env), requireRole("empresa"));
 
   function parseOptionalInt(value: unknown, field: string) {
     if (value === undefined) return undefined;
@@ -109,16 +215,98 @@ export function createCompanyRouter(ctx: AppContext) {
     }
   });
 
+  router.delete("/account", async (req, res, next) => {
+    try {
+      if (!req.auth) throw Errors.unauthorized();
+      await ctx.db.execute(`DELETE FROM users WHERE id = :id AND role = 'empresa'`, { id: req.auth.id });
+      return res.status(204).send();
+    } catch (e) {
+      return next(e);
+    }
+  });
+
+  router.get("/talentos", async (req, res, next) => {
+    try {
+      if (!req.auth) throw Errors.unauthorized();
+      const query = optionalString(req.query.query ?? null, "query");
+      const pageRaw = optionalString(req.query.page ?? null, "page");
+      const pageSizeRaw = optionalString(req.query.pageSize ?? null, "pageSize");
+      const page = pageRaw ? Number(pageRaw) : 1;
+      const pageSize = pageSizeRaw ? Number(pageSizeRaw) : 12;
+      if (!Number.isFinite(page) || !Number.isInteger(page) || page < 1) throw Errors.badRequest("Parámetro 'page' inválido.");
+      if (!Number.isFinite(pageSize) || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 50) {
+        throw Errors.badRequest("Parámetro 'pageSize' inválido.");
+      }
+      const q = query?.trim() ? `%${query.trim().toLowerCase()}%` : null;
+      const countRow = await ctx.db.queryOne<any>(
+        `SELECT COUNT(*)::int as count
+         FROM users u
+         JOIN talent_profiles tp ON tp.user_id = u.id
+         WHERE u.role = 'talento'
+           AND tp.company_user_id = :companyUserId
+           AND (:q IS NULL OR LOWER(tp.full_name) LIKE :q OR LOWER(tp.headline) LIKE :q OR LOWER(tp.location) LIKE :q)`,
+        { companyUserId: req.auth.id, q },
+      );
+      const total = Number(countRow?.count ?? 0);
+      const offset = (page - 1) * pageSize;
+      const items = await ctx.db.queryMany<any>(
+        `SELECT u.id::text as id,
+                tp.full_name as "fullName",
+                tp.headline,
+                tp.location,
+                tp.updated_at as "updatedAt"
+         FROM users u
+         JOIN talent_profiles tp ON tp.user_id = u.id
+         WHERE u.role = 'talento'
+           AND tp.company_user_id = :companyUserId
+           AND (:q IS NULL OR LOWER(tp.full_name) LIKE :q OR LOWER(tp.headline) LIKE :q OR LOWER(tp.location) LIKE :q)
+         ORDER BY tp.updated_at DESC
+         LIMIT :limit OFFSET :offset`,
+        { companyUserId: req.auth.id, q, limit: pageSize, offset },
+      );
+      return res.json({ items, total, page, pageSize });
+    } catch (e) {
+      return next(e);
+    }
+  });
+
+  router.post("/talentos/:id/asignar", async (req, res, next) => {
+    try {
+      if (!req.auth) throw Errors.unauthorized();
+      const talentUserId = asNumberId(req.params.id, "id");
+      const user = await ctx.db.queryOne<any>(`SELECT role FROM users WHERE id = :id`, { id: talentUserId });
+      if (!user) throw Errors.notFound("Talento no encontrado.");
+      if (user.role !== "talento") throw Errors.badRequest("El usuario no corresponde a un talento.");
+      const profile = await talentProfiles.upsert(talentUserId, { companyUserId: req.auth.id });
+      return res.status(201).json({ profile });
+    } catch (e) {
+      return next(e);
+    }
+  });
+
+  router.delete("/talentos/:id/asignar", async (req, res, next) => {
+    try {
+      if (!req.auth) throw Errors.unauthorized();
+      const talentUserId = asNumberId(req.params.id, "id");
+      const user = await ctx.db.queryOne<any>(`SELECT role FROM users WHERE id = :id`, { id: talentUserId });
+      if (!user) throw Errors.notFound("Talento no encontrado.");
+      if (user.role !== "talento") throw Errors.badRequest("El usuario no corresponde a un talento.");
+      const profile = await talentProfiles.upsert(talentUserId, { companyUserId: null });
+      return res.json({ profile });
+    } catch (e) {
+      return next(e);
+    }
+  });
+
   router.post("/validate-rut", async (req, res, next) => {
     try {
       if (!req.auth) throw Errors.unauthorized();
       const body = req.body ?? {};
       const rut = requiredString(body.rut, "rut");
-      const out = await validateRutWithSii(rut);
+      const normalized = validateRutOrThrow(rut);
       return res.json({
         valid: true,
-        rut: out.rut,
-        result: out.data,
+        rut: normalized,
       });
     } catch (e) {
       return next(e);
@@ -130,10 +318,11 @@ export function createCompanyRouter(ctx: AppContext) {
       if (!req.auth) throw Errors.unauthorized();
       const body = req.body ?? {};
       const contactEmail = body.contactEmail === undefined ? undefined : body.contactEmail === null ? null : email(body.contactEmail, "contactEmail");
+      const taxId = body.taxId === undefined ? undefined : body.taxId === null ? null : validateRutOrThrow(requiredString(body.taxId, "taxId"));
       const profile = await repo.upsert(req.auth.id, {
         companyName: optionalString(body.companyName, "companyName"),
         legalName: optionalString(body.legalName, "legalName"),
-        taxId: optionalString(body.taxId, "taxId"),
+        taxId,
         companySize: optionalString(body.companySize, "companySize"),
         industry: optionalString(body.industry, "industry"),
         activitySector: optionalString(body.activitySector, "activitySector"),
@@ -160,12 +349,12 @@ export function createCompanyRouter(ctx: AppContext) {
         throw Errors.badRequest("Debes verificar los datos empresariales y aceptar los términos específicos.");
       }
       const rawRut = requiredString(body.taxId, "taxId");
-      const validatedRut = await validateRutWithSii(rawRut);
+      const validatedRut = validateRutOrThrow(rawRut);
 
       const profile = await repo.upsert(req.auth.id, {
         companyName: requiredString(body.companyName, "companyName"),
         legalName: requiredString(body.legalName, "legalName"),
-        taxId: validatedRut.rut,
+        taxId: validatedRut,
         companySize: requiredString(body.companySize, "companySize"),
         industry: requiredString(body.industry, "industry"),
         activitySector: requiredString(body.activitySector, "activitySector"),
@@ -214,12 +403,6 @@ export function createCompanyRouter(ctx: AppContext) {
     try {
       if (!req.auth) throw Errors.unauthorized();
       const body = req.body ?? {};
-      const parseOptionalInt = (value: unknown, field: string) => {
-        if (value === undefined || value === null || value === "") return null;
-        const n = Number(value);
-        if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) throw Errors.badRequest(`Campo '${field}' es inválido.`);
-        return n;
-      };
 
       const title = requiredString(body.title, "title");
       const description = requiredString(body.description, "description");
