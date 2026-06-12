@@ -14,11 +14,15 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import dns from "node:dns";
 import postgres from "postgres";
 import bcrypt from "bcryptjs";
 
 dns.setDefaultResultOrder("ipv4first");
+
+const __filename = typeof __filename !== "undefined" ? __filename : fileURLToPath(import.meta?.url ?? "");
+const __dirname  = typeof __dirname  !== "undefined" ? __dirname  : path.dirname(__filename);
 
 // ── Config ──────────────────────────────────────────────────────────────
 const CLEAN  = process.argv.includes("--clean");
