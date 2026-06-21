@@ -36,10 +36,22 @@ function defaultState(): OllamaSessionsState {
 }
 
 /**
- * Carga el estado desde localStorage.
+ * Carga el estado desde localStorage y corrige versiones de modelos antiguas.
  */
 function loadState(): OllamaSessionsState {
-  return readJson<OllamaSessionsState>(STORAGE_KEY) ?? defaultState();
+  const state = readJson<OllamaSessionsState>(STORAGE_KEY);
+  if (!state) return defaultState();
+  
+  // Corrige sesiones con modelos antiguos
+  const updatedSessions = state.sessions.map(session => {
+    // Cambia cualquier modelo anterior a llama3:8b-instruct-q4_0 (más rápido en CPU)
+    if (session.model === "llama3.2:latest" || session.model === "llama3:latest") {
+      return { ...session, model: "llama3:8b-instruct-q4_0" };
+    }
+    return session;
+  });
+  
+  return { ...state, sessions: updatedSessions };
 }
 
 /**
@@ -160,14 +172,27 @@ export function useOllamaSessions() {
 
   /**
    * Elimina una sesión y limpia selección activa si correspondía.
+   * Si hay otras sesiones, selecciona la primera disponible.
    */
   const deleteSession = useCallback((id: string) => {
     setState((prev) => {
+      const sessionToDelete = findSession(prev, id);
       const nextSessions = prev.sessions.filter((s) => s.id !== id);
       const nextActive = { ...prev.activeSessionIdByKind };
-      for (const kind of ["general", "interview"] as const) {
-        if (nextActive[kind] === id) delete nextActive[kind];
+
+      if (sessionToDelete) {
+        const kind = sessionToDelete.kind;
+        if (nextActive[kind] === id) {
+          const remainingSessionsOfKind = nextSessions.filter((s) => s.kind === kind);
+          if (remainingSessionsOfKind.length > 0) {
+            // Selecciona la primera sesión disponible
+            nextActive[kind] = remainingSessionsOfKind[0].id;
+          } else {
+            delete nextActive[kind];
+          }
+        }
       }
+
       return { ...prev, sessions: nextSessions, activeSessionIdByKind: nextActive };
     });
   }, []);

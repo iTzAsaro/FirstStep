@@ -36,6 +36,9 @@ export function createTalentRouter(ctx: AppContext) {
     new CompanyProfileRepository(ctx.db),
   );
 
+  /**
+   * Verifica si el perfil de talento tiene el onboarding completo.
+   */
   function isOnboardingComplete(profile: any) {
     const fullName = typeof profile?.fullName === "string" ? profile.fullName.trim() : "";
     const city = typeof profile?.location === "string" ? profile.location.trim() : "";
@@ -46,6 +49,9 @@ export function createTalentRouter(ctx: AppContext) {
     return Boolean(fullName && city && university && degree && gradYear && careers.length >= 3);
   }
 
+  /**
+   * Registro de talento.
+   */
   router.post("/register", async (req, res, next) => {
     try {
       const body = req.body ?? {};
@@ -72,6 +78,9 @@ export function createTalentRouter(ctx: AppContext) {
     }
   });
 
+  /**
+   * Login de talento.
+   */
   router.post("/login", async (req, res, next) => {
     try {
       const body = req.body ?? {};
@@ -88,6 +97,9 @@ export function createTalentRouter(ctx: AppContext) {
     }
   });
 
+  /**
+   * Login OAuth de talento (Supabase).
+   */
   router.post("/login/oauth", async (req, res, next) => {
     try {
       const authHeader = req.headers.authorization ?? "";
@@ -103,6 +115,9 @@ export function createTalentRouter(ctx: AppContext) {
 
   router.use(authenticate(ctx.env), requireRole("talento"));
 
+  /**
+   * Normaliza un arreglo de strings (trim y filtra vacíos).
+   */
   function normalizeStringArray(value: unknown, field: string) {
     if (value === undefined || value === null) return null;
     if (!Array.isArray(value)) throw Errors.badRequest(`Campo '${field}' debe ser un arreglo.`);
@@ -112,6 +127,9 @@ export function createTalentRouter(ctx: AppContext) {
     return items;
   }
 
+  /**
+   * Valida una URL opcional (solo http/https).
+   */
   function validateOptionalUrl(value: string | null, field: string) {
     if (!value) return null;
     try {
@@ -123,6 +141,9 @@ export function createTalentRouter(ctx: AppContext) {
     }
   }
 
+  /**
+   * Obtiene el perfil del talento autenticado.
+   */
   router.get("/profile", async (req, res, next) => {
     try {
       if (!req.auth) throw Errors.unauthorized();
@@ -133,6 +154,9 @@ export function createTalentRouter(ctx: AppContext) {
     }
   });
 
+  /**
+   * Obtiene el dashboard del talento (estadísticas y actividad).
+   */
   router.get("/dashboard", async (req, res, next) => {
     try {
       if (!req.auth) throw Errors.unauthorized();
@@ -212,6 +236,9 @@ export function createTalentRouter(ctx: AppContext) {
     }
   });
 
+  /**
+   * Actualiza el perfil del talento.
+   */
   router.put("/profile", async (req, res, next) => {
     try {
       if (!req.auth) throw Errors.unauthorized();
@@ -231,6 +258,9 @@ export function createTalentRouter(ctx: AppContext) {
     }
   });
 
+  /**
+   * Completa el onboarding del talento.
+   */
   router.post("/onboarding", async (req, res, next) => {
     try {
       if (!req.auth) throw Errors.unauthorized();
@@ -280,6 +310,9 @@ export function createTalentRouter(ctx: AppContext) {
     }
   });
 
+  /**
+   * Lista ofertas de trabajo activas para el talento.
+   */
   router.get("/jobs", async (req, res, next) => {
     try {
       if (!req.auth) throw Errors.unauthorized();
@@ -290,6 +323,9 @@ export function createTalentRouter(ctx: AppContext) {
     }
   });
 
+  /**
+   * Postula a una oferta de trabajo.
+   */
   router.post("/jobs/:id/apply", async (req, res, next) => {
     try {
       if (!req.auth) throw Errors.unauthorized();
@@ -306,6 +342,9 @@ export function createTalentRouter(ctx: AppContext) {
     }
   });
 
+  /**
+   * Lista conversaciones del talento.
+   */
   router.get("/conversations", async (req, res, next) => {
     try {
       if (!req.auth) throw Errors.unauthorized();
@@ -316,6 +355,9 @@ export function createTalentRouter(ctx: AppContext) {
     }
   });
 
+  /**
+   * Obtiene los mensajes de una conversación.
+   */
   router.get("/conversations/:id/messages", async (req, res, next) => {
     try {
       if (!req.auth) throw Errors.unauthorized();
@@ -329,6 +371,9 @@ export function createTalentRouter(ctx: AppContext) {
     }
   });
 
+  /**
+   * Envía un mensaje en una conversación.
+   */
   router.post("/conversations/:id/messages", async (req, res, next) => {
     try {
       if (!req.auth) throw Errors.unauthorized();

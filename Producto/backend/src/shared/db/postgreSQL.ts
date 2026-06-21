@@ -6,11 +6,7 @@
 // ╚══════════════════════════════════════════════════════════════════════╝
 
 import type { Env } from "../../config/env";
-import dns from "node:dns";
 import postgres from "postgres";
-
-// ── Forzar IPv4 en la resolución DNS ────────────────────────────────────
-dns.setDefaultResultOrder("ipv4first");
 
 export type Db = {
   sql: any;

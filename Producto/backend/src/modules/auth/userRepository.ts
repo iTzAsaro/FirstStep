@@ -70,6 +70,9 @@ export class UserRepository {
     return row ?? null;
   }
 
+  /**
+   * Busca un usuario por id de Supabase.
+   */
   async findBySupabaseUserId(supabaseUserId: string): Promise<User | null> {
     const row = await this.db.queryOne<any>(
       `SELECT id,
@@ -88,6 +91,9 @@ export class UserRepository {
     return row ?? null;
   }
 
+  /**
+   * Asocia un id de Supabase a un usuario existente por email (solo si no está asignado).
+   */
   async attachSupabaseUserIdByEmail(email: string, supabaseUserId: string) {
     await this.db.execute(
       `UPDATE users
@@ -124,6 +130,9 @@ export class UserRepository {
     return row as User;
   }
 
+  /**
+   * Crea un usuario con id de Supabase y retorna el registro persistido.
+   */
   async createWithSupabaseUserId(input: CreateUserWithSupabaseInput): Promise<User> {
     const row = await this.db.queryOne<any>(
       `INSERT INTO users (email, role, password_hash, supabase_user_id, accepted_terms_at, accepted_privacy_at)

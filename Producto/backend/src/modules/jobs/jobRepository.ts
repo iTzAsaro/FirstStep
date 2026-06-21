@@ -1,3 +1,10 @@
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║ Archivo:     jobRepository.ts                                        ║
+// ║ Módulo:      backend/src/modules/jobs                                ║
+// ║ Descripción: Repositorio para ofertas de empleo y postulaciones      ║
+// ║ Creado:      20-05-2026                                              ║
+// ╚═════════════════════════════════════════════════════════════════════╝
+
 import type { Db } from "../../shared/db/postgreSQL";
 
 import type {
@@ -10,9 +17,15 @@ import type {
   UpdateJobInput,
 } from "./types";
 
+/**
+ * Repositorio de ofertas de empleo y postulaciones
+ */
 export class JobRepository {
   constructor(private readonly db: Db) { }
 
+  /**
+   * Crea una nueva oferta de empleo para una empresa
+   */
   async create(companyUserId: number, input: CreateJobInput): Promise<Job> {
     const row = await this.db.queryOne<any>(
       `INSERT INTO jobs
@@ -40,6 +53,9 @@ export class JobRepository {
     return row as Job;
   }
 
+  /**
+   * Lista todas las ofertas de una empresa con conteo de postulantes
+   */
   async listForCompany(companyUserId: number): Promise<Array<Job & { applicantsCount: number }>> {
     const rows = await this.db.queryMany<any>(
       `SELECT j.id,
@@ -72,6 +88,9 @@ export class JobRepository {
     return rows;
   }
 
+  /**
+   * Obtiene una oferta de empleo por id para una empresa
+   */
   async getForCompany(companyUserId: number, jobId: number): Promise<Job | null> {
     const row = await this.db.queryOne<any>(
       `SELECT id,
@@ -96,6 +115,9 @@ export class JobRepository {
     return row ?? null;
   }
 
+  /**
+   * Actualiza una oferta de empleo existente para una empresa
+   */
   async updateForCompany(companyUserId: number, jobId: number, input: UpdateJobInput): Promise<Job | null> {
     const current = await this.getForCompany(companyUserId, jobId);
     if (!current) return null;
@@ -149,6 +171,9 @@ export class JobRepository {
     return row ?? null;
   }
 
+  /**
+   * Lista ofertas activas para un talento, con indicador si ya postuló
+   */
   async listActiveForTalent(talentUserId: number): Promise<Array<JobWithCompany & { hasApplied: boolean }>> {
     const rows = await this.db.queryMany<any>(
       `SELECT j.id,
@@ -180,6 +205,9 @@ export class JobRepository {
     return rows;
   }
 
+  /**
+   * Crea o actualiza una postulación de un talento a una oferta
+   */
   async apply(jobId: number, talentUserId: number, coverLetter: string | null) {
     const job = await this.db.queryOne<any>(
       `SELECT status, application_deadline as "applicationDeadline"
@@ -216,6 +244,9 @@ export class JobRepository {
     return row;
   }
 
+  /**
+   * Elimina una oferta de empleo de una empresa
+   */
   async deleteForCompany(companyUserId: number, jobId: number) {
     const row = await this.db.queryOne<any>(
       `DELETE FROM jobs
@@ -226,6 +257,9 @@ export class JobRepository {
     return row ?? null;
   }
 
+  /**
+   * Obtiene un resumen del dashboard para una empresa
+   */
   async getDashboardSummary(companyUserId: number) {
     const stats = await this.db.queryOne<any>(
       `SELECT
@@ -282,6 +316,9 @@ export class JobRepository {
     };
   }
 
+  /**
+   * Lista postulantes para una empresa con filtros opcionales
+   */
   async listApplicantsForCompany(
     companyUserId: number,
     filters: { jobId?: number | null; query?: string | null; status?: string | null; skills?: string | null; experience?: string | null },
@@ -363,6 +400,9 @@ export class JobRepository {
     return rows;
   }
 
+  /**
+   * Obtiene una postulación por id para una empresa
+   */
   async getApplicationForCompany(companyUserId: number, applicationId: number) {
     const row = await this.db.queryOne<any>(
       `SELECT ja.id,
@@ -377,6 +417,9 @@ export class JobRepository {
     return row ?? null;
   }
 
+  /**
+   * Actualiza el estado de una postulación para una empresa
+   */
   async updateApplicationStatusForCompany(companyUserId: number, applicationId: number, status: string) {
     const row = await this.db.queryOne<any>(
       `UPDATE job_applications ja
@@ -392,6 +435,9 @@ export class JobRepository {
     return row ?? null;
   }
 
+  /**
+   * Obtiene los detalles de un postulante para una empresa
+   */
   async getApplicantDetailForCompany(companyUserId: number, applicationId: number) {
     const application = await this.db.queryOne<any>(
       `SELECT ja.id,
@@ -433,6 +479,9 @@ export class JobRepository {
     return { application, cvs };
   }
 
+  /**
+   * Abre una conversación para una postulación existente
+   */
   async openConversationForApplication(companyUserId: number, applicationId: number): Promise<CompanyConversation | null> {
     const application = await this.db.queryOne<any>(
       `SELECT ja.id as "applicationId",
@@ -487,6 +536,9 @@ export class JobRepository {
     );
   }
 
+  /**
+   * Lista todas las conversaciones de una empresa
+   */
   async listConversationsForCompany(companyUserId: number): Promise<CompanyConversation[]> {
     const rows = await this.db.queryMany<any>(
       `SELECT ac.id,
@@ -523,6 +575,9 @@ export class JobRepository {
     return rows;
   }
 
+  /**
+   * Obtiene una conversación por id para una empresa
+   */
   async getConversationForCompany(companyUserId: number, conversationId: number): Promise<CompanyConversation | null> {
     const row = await this.db.queryOne<any>(
       `SELECT ac.id,
@@ -552,6 +607,9 @@ export class JobRepository {
     return row ?? null;
   }
 
+  /**
+   * Lista todas las conversaciones de un talento
+   */
   async listConversationsForTalent(talentUserId: number): Promise<CompanyConversation[]> {
     const rows = await this.db.queryMany<any>(
       `SELECT ac.id,
@@ -588,6 +646,9 @@ export class JobRepository {
     return rows;
   }
 
+  /**
+   * Obtiene una conversación por id para un talento
+   */
   async getConversationForTalent(talentUserId: number, conversationId: number): Promise<CompanyConversation | null> {
     const row = await this.db.queryOne<any>(
       `SELECT ac.id,
@@ -617,6 +678,9 @@ export class JobRepository {
     return row ?? null;
   }
 
+  /**
+   * Lista todos los mensajes de una conversación
+   */
   async listMessagesForConversation(conversationId: number): Promise<ConversationMessage[]> {
     const rows = await this.db.queryMany<any>(
       `SELECT id,
@@ -636,6 +700,9 @@ export class JobRepository {
     return rows;
   }
 
+  /**
+   * Crea un nuevo mensaje en una conversación
+   */
   async createMessageForConversation(
     conversationId: number,
     senderUserId: number,
@@ -669,6 +736,9 @@ export class JobRepository {
     return row as ConversationMessage;
   }
 
+  /**
+   * Verifica que un usuario sea participante de una conversación
+   */
   async getConversationForParticipant(userId: number, conversationId: number) {
     const row = await this.db.queryOne<any>(
       `SELECT id,
@@ -682,6 +752,9 @@ export class JobRepository {
     return row ?? null;
   }
 
+  /**
+   * Crea un archivo adjunto en una conversación
+   */
   async createFileForConversation(
     conversationId: number,
     uploaderUserId: number,
@@ -720,6 +793,9 @@ export class JobRepository {
     };
   }
 
+  /**
+   * Obtiene un archivo adjunto si el usuario es participante de la conversación
+   */
   async getFileForParticipant(userId: number, fileId: number) {
     const row = await this.db.queryOne<any>(
       `SELECT cf.id,

@@ -26,6 +26,9 @@ export function createAuthRouter(ctx: AppContext) {
     companyProfiles,
   );
 
+  /**
+   * Verifica si el usuario ha completado el onboarding según su rol.
+   */
   async function readOnboardingCompleted(user: { id: number; role: "talento" | "empresa" }) {
     if (user.role === "empresa") {
       const profile = await companyProfiles.get(user.id);
@@ -43,6 +46,9 @@ export function createAuthRouter(ctx: AppContext) {
     );
   }
 
+  /**
+   * Maneja login OAuth (Supabase Access Token).
+   */
   async function handleSupabaseLogin(req: any, roleRawFallback: string) {
     const auth = req.headers.authorization ?? "";
     const token = auth.startsWith("Bearer ") ? auth.slice("Bearer ".length).trim() : "";
@@ -136,6 +142,9 @@ export function createAuthRouter(ctx: AppContext) {
     }
   });
 
+  /**
+   * Login con Google (Supabase OAuth).
+   */
   router.post("/login/google", async (req, res, next) => {
     try {
       const out = await handleSupabaseLogin(req, "talento");
@@ -146,6 +155,9 @@ export function createAuthRouter(ctx: AppContext) {
     }
   });
 
+  /**
+   * Login con LinkedIn (Supabase OAuth).
+   */
   router.post("/login/linkedin", async (req, res, next) => {
     try {
       const out = await handleSupabaseLogin(req, "talento");
@@ -156,6 +168,9 @@ export function createAuthRouter(ctx: AppContext) {
     }
   });
 
+  /**
+   * Login genérico OAuth (Supabase).
+   */
   router.post("/login/oauth", async (req, res, next) => {
     try {
       const out = await handleSupabaseLogin(req, "talento");

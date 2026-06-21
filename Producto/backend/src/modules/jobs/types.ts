@@ -1,7 +1,28 @@
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║ Archivo:     types.ts                                                ║
+// ║ Módulo:      backend/src/modules/jobs                                ║
+// ║ Descripción: Tipos de dominio para ofertas de empleo y postulaciones.║
+// ║ Creado:      20-05-2026                                              ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
+/**
+ * Estados posibles para una oferta de empleo.
+ */
 export type JobStatus = "active" | "paused" | "closed";
+
+/**
+ * Tipos de jornada para una oferta de empleo.
+ */
 export type EmploymentType = "full_time" | "part_time" | "contract" | "internship";
+
+/**
+ * Niveles de experiencia para una oferta de empleo.
+ */
 export type Seniority = "junior" | "mid" | "senior";
 
+/**
+ * Oferta de empleo persistida en base de datos.
+ */
 export type Job = {
   id: number;
   companyUserId: number;
@@ -20,8 +41,14 @@ export type Job = {
   updatedAt: string;
 };
 
+/**
+ * Oferta de empleo con el nombre de la empresa.
+ */
 export type JobWithCompany = Job & { companyName: string | null };
 
+/**
+ * Datos necesarios para crear una oferta de empleo.
+ */
 export type CreateJobInput = Pick<
   Job,
   | "title"
@@ -36,10 +63,19 @@ export type CreateJobInput = Pick<
   | "applicationDeadline"
 >;
 
+/**
+ * Datos para actualizar una oferta de empleo.
+ */
 export type UpdateJobInput = Partial<CreateJobInput> & Partial<Pick<Job, "status">>;
 
+/**
+ * Estados posibles para una postulación a una oferta de empleo.
+ */
 export type JobApplicationStatus = "submitted" | "withdrawn" | "rejected" | "accepted";
 
+/**
+ * Postulación a una oferta de empleo.
+ */
 export type JobApplication = {
   id: number;
   jobId: number;
@@ -50,6 +86,9 @@ export type JobApplication = {
   updatedAt: string;
 };
 
+/**
+ * Postulación a una oferta con datos del talento.
+ */
 export type JobApplicationWithTalent = JobApplication & {
   jobTitle: string;
   talentEmail: string;
@@ -63,6 +102,9 @@ export type JobApplicationWithTalent = JobApplication & {
   cvTitles: string[];
 };
 
+/**
+ * Conversación entre empresa y talento asociada a una postulación.
+ */
 export type CompanyConversation = {
   id: number;
   applicationId: number;
@@ -76,6 +118,9 @@ export type CompanyConversation = {
   updatedAt: string;
 };
 
+/**
+ * Mensaje de una conversación entre empresa y talento.
+ */
 export type ConversationMessage = {
   id: number;
   conversationId: number;

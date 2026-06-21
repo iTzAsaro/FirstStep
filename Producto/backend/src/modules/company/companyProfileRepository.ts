@@ -116,6 +116,9 @@ export class CompanyProfileRepository {
     return (await this.get(userId)) as CompanyProfile;
   }
 
+  /**
+   * Verifica si el onboarding de la empresa está completo.
+   */
   isOnboardingComplete(profile: CompanyProfile | null) {
     if (!profile) return false;
     return Boolean(
@@ -133,6 +136,9 @@ export class CompanyProfileRepository {
     );
   }
 
+  /**
+   * Obtiene el perfil público de una empresa por userId.
+   */
   async getPublic(userId: number) {
     const row = await this.db.queryOne<any>(
       `SELECT u.id::text as id,
@@ -154,6 +160,9 @@ export class CompanyProfileRepository {
     return row ?? null;
   }
 
+  /**
+   * Lista perfiles públicos de empresas con filtros y paginación.
+   */
   async listPublic(params: {
     query?: string | null;
     industry?: string | null;

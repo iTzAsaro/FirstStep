@@ -1,6 +1,6 @@
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║ docker-compose.yml — FirstStep  (desarrollo local)                   ║
-# ║ DB: Supabase (nube) — no se levanta PostgreSQL local                 ║
+# ║ DB: Supabase (no PostgreSQL local)                                   ║
 # ╚══════════════════════════════════════════════════════════════════════╝
 
 services:
@@ -12,27 +12,14 @@ services:
     container_name: firststep-backend
     restart: unless-stopped
     env_file:
-      - ./.env.local
+      - ./.env
     ports:
       - "3001:3001"
-    # Forzar IPv4 en la resolución DNS del contenedor.
-    # Sin esto, Node resuelve Supabase a IPv6 y falla con ENETUNREACH.
     dns:
       - 8.8.8.8
-      - 1.1.1.1
-    sysctls:
-      net.ipv6.conf.all.disable_ipv6: 1
-    environment:
-      NODE_ENV: development
-      PORT: 3001
-      DB_TEST_ON_STARTUP: "false"
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-12h}
-      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-10}
-      CORS_ORIGIN: "http://localhost:5173"
-      SUPABASE_JWKS_URL: ${SUPABASE_JWKS_URL:-https://xhklhawelqtmxcoqznup.supabase.co/auth/v1/.well-known/jwks.json}
-      SUPABASE_JWKS_BASE64: ${SUPABASE_JWKS_BASE64:-eyJrZXlzIjpbeyJhbGciOiJFUzI1NiIsImNydiI6IlAtMjU2IiwiZXh0Ijp0cnVlLCJrZXlfb3BzIjpbInZlcmlmeSJdLCJraWQiOiI5MGVjYTE3Ni1hMDgxLTQ2ZDctOWM5YS01Y2ZkNjJmY2ZjYTMiLCJrdHkiOiJFQyIsInVzZSI6InNpZyIsIngiOiJOZGRtSUh5RnI0dnZzbTMwWk9qdS1jWEpFR2M0NlhRMEJOVHpTNDJ3a0gwIiwieSI6Im5YZnczbkx1Rjl1RWhiOTFtVGpRZDV0NlNQS2tuUUhxLUl1aDhzUmdGOUEifV19}
-      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      - 8.8.4.4
+      - 2001:4860:4860::8888
+      - 2001:4860:4860::8844
     networks:
       - firststep-net
     healthcheck:
@@ -71,17 +58,22 @@ services:
     image: ollama/ollama:latest
     container_name: firststep-ollama
     restart: unless-stopped
+    ports:
+      - "11435:11434"
     volumes:
       - ollama-data:/root/.ollama
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+      - 2001:4860:4860::8888
+      - 2001:4860:4860::8844
     networks:
       - firststep-net
 
 networks:
   firststep-net:
     driver: bridge
-    # Deshabilitar IPv6 en la red Docker para evitar que los contenedores
-    # resuelvan hostnames externos (ej: Supabase) a direcciones IPv6
-    enable_ipv6: false
+    enable_ipv6: true
 
 volumes:
   ollama-data:
